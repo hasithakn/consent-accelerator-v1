@@ -1,0 +1,163 @@
+<?xml version="1.0"?>
+<project xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd" xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.wso2.consent</groupId>
+  <artifactId>com.wso2.consent.accelerator.utils</artifactId>
+  <version>1.0-SNAPSHOT</version>
+  <name>com.wso2.consent.accelerator.utils</name>
+  <url>http://maven.apache.org</url>
+  <packaging>bundle</packaging>
+
+  <repositories>
+    <repository>
+      <id>wso2-nexus-2</id>
+      <name>WSO2 internal Repository</name>
+      <url>https://support-maven.wso2.org/nexus/content/repositories/updates-2.0/</url>
+      <releases>
+        <enabled>true</enabled>
+        <updatePolicy>daily</updatePolicy>
+        <checksumPolicy>ignore</checksumPolicy>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
+    <repository>
+      <id>wso2-nexus</id>
+      <name>WSO2 internal Repository</name>
+      <url>https://maven.wso2.org/nexus/content/groups/wso2-public/</url>
+      <releases>
+        <enabled>true</enabled>
+        <updatePolicy>daily</updatePolicy>
+        <checksumPolicy>ignore</checksumPolicy>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
+    <repository>
+      <id>wso2.releases</id>
+      <name>WSO2 internal Repository</name>
+      <url>https://maven.wso2.org/nexus/content/repositories/releases/</url>
+      <releases>
+        <enabled>true</enabled>
+        <updatePolicy>daily</updatePolicy>
+        <checksumPolicy>ignore</checksumPolicy>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
+    <repository>
+      <id>wso2.snapshots</id>
+      <name>Apache Snapshot Repository</name>
+      <url>https://maven.wso2.org/nexus/content/repositories/snapshots/</url>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+      <releases>
+        <enabled>false</enabled>
+      </releases>
+    </repository>
+  </repositories>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.wso2.carbon.identity.inbound.auth.oauth2</groupId>
+      <artifactId>org.wso2.carbon.identity.oauth</artifactId>
+        <version>7.0.259.26</version>
+    </dependency>
+    <dependency>
+      <groupId>org.wso2.carbon</groupId>
+      <artifactId>org.wso2.carbon.user.core</artifactId>
+      <version>${wso2.carbon.kernel.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.wso2.carbon</groupId>
+      <artifactId>org.wso2.carbon.utils</artifactId>
+      <version>${wso2.carbon.kernel.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>commons-logging</groupId>
+      <artifactId>commons-logging</artifactId>
+      <version>${commons.logging.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.wso2.carbon.identity.framework</groupId>
+      <artifactId>org.wso2.carbon.identity.application.authentication.framework</artifactId>
+      <version>${carbon.identity.framework.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.felix</groupId>
+      <artifactId>org.apache.felix.scr.ds-annotations</artifactId>
+      <version>${apache.felix.ds.annotations.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.wso2.carbon.identity.local.auth.api</groupId>
+      <artifactId>org.wso2.carbon.identity.local.auth.api.core</artifactId>
+      <version>${carbon.identity.local.auth.api.version}</version>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <pluginManagement>
+      <plugins>
+        <plugin>
+          <groupId>org.apache.felix</groupId>
+          <artifactId>maven-bundle-plugin</artifactId>
+          <version>3.2.0</version>
+          <extensions>true</extensions>
+        </plugin>
+      </plugins>
+    </pluginManagement>
+
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>2.3.1</version>
+        <configuration>
+          <encoding>UTF-8</encoding>
+          <source>1.8</source>
+          <target>1.8</target>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.felix</groupId>
+        <artifactId>maven-bundle-plugin</artifactId>
+        <extensions>true</extensions>
+        <configuration>
+          <instructions>
+            <Bundle-SymbolicName>${project.artifactId}</Bundle-SymbolicName>
+            <Bundle-Name>${project.artifactId}</Bundle-Name>
+            <Import-Package>
+              org.osgi.framework,
+              *;resolution:=optional
+            </Import-Package>
+            <Export-Package>
+              com.wso2.consent.accelerator.*; version="${project.version}"
+            </Export-Package>
+            <DynamicImport-Package>*</DynamicImport-Package>
+          </instructions>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <maven.compiler.source>11</maven.compiler.source>
+    <maven.compiler.target>11</maven.compiler.target>
+    <wso2.carbon.kernel.version>4.6.1</wso2.carbon.kernel.version>
+    <commons.logging.version>1.2</commons.logging.version>
+    <apache.felix.ds.annotations.version>1.2.8</apache.felix.ds.annotations.version>
+    <carbon.identity.framework.version>5.25.522</carbon.identity.framework.version>
+    <carbon.identity.framework.imp.pkg.version.range>[5.19.14, 8.0.0)
+    </carbon.identity.framework.imp.pkg.version.range>
+    <carbon.identity.local.auth.api.version>2.4.0</carbon.identity.local.auth.api.version>
+    <openbanking.accelerator.version>[3.0.0.310, 4.0.0)</openbanking.accelerator.version>
+  </properties>
+
+</project>
