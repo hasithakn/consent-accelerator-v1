@@ -106,12 +106,12 @@ public class FSRefreshGrantHandler extends RefreshGrantHandler {
         String consentId = getConsentIdFromScopesArray(oAuth2AccessTokenRespDTO.getAuthorizedScopes()
                 .split(" "));
         String consentIdClaimName = "consent_id";
-        oAuth2AccessTokenRespDTO.addParameter(consentIdClaimName, consentId);
+        oAuth2AccessTokenRespDTO.addParameterObject(consentIdClaimName, consentId);
         List<String> collect = Arrays.stream(oAuth2AccessTokenRespDTO.getAuthorizedScopes().split(" "))
                 .collect(Collectors.toList());
         collect.removeIf(e->e.startsWith("consent_id"));
         oAuth2AccessTokenRespDTO.setAuthorizedScopes(String.join(" ", collect));
-        oAuth2AccessTokenRespDTO.addParameter("scope", String.join(" ", collect));
+        oAuth2AccessTokenRespDTO.addParameterObject("scope", String.join(" ", collect));
 
     }
 
