@@ -14,7 +14,7 @@
 
     <modules>
         <module>consent-accelerator-utils</module>
-        <module>consent-authentication-webapp</module>
+        <module>consent-webapp</module>
     </modules>
 
     <repositories>
@@ -85,26 +85,11 @@
         <commons.logging.version>1.2</commons.logging.version>
         <apache.felix.ds.annotations.version>1.2.8</apache.felix.ds.annotations.version>
         <openbanking.accelerator.version>[3.0.0.310, 4.0.0)</openbanking.accelerator.version>
-        <swagger.jaxrs.version>1.5.20</swagger.jaxrs.version>
-        <jstl.version>1.2</jstl.version>
-        <slf4j.version>1.7.32</slf4j.version>
-        <javax.servlet.version>3.1.0</javax.servlet.version>
-        <spotbugs.annotations.version>4.7.3</spotbugs.annotations.version>
-        <json.wso2.version>3.0.0.wso2v1</json.wso2.version>
-        <commons.io.wso2.version>2.4.0.wso2v1</commons.io.wso2.version>
-        <commons.lang3.version>3.12.0</commons.lang3.version>
-        <encoder.wso2.version>1.2.0.wso2v1</encoder.wso2.version>
-        <httpclient.wso2.version>4.3.6.wso2v2</httpclient.wso2.version>
-        <httpcore.wso2.version>4.3.3.wso2v1</httpcore.wso2.version>
-        <taglibs.standard.version>1.2.5</taglibs.standard.version>
-        <tomcat.catalina.version>9.0.80</tomcat.catalina.version>
-        <findsecbugs.version>1.12.0</findsecbugs.version>
         
         <!-- Plugin Versions -->
         <maven.compiler.plugin.version>3.8.1</maven.compiler.plugin.version>
-        <maven.bundle.plugin.version>5.1.9</maven.bundle.plugin.version>
+        <maven.bundle.plugin.version>3.2.0</maven.bundle.plugin.version>
         <maven.war.plugin.version>3.3.2</maven.war.plugin.version>
-        <spotbugs.maven.plugin.version>4.7.3.0</spotbugs.maven.plugin.version>
     </properties>
 
     <dependencyManagement>
@@ -152,78 +137,6 @@
                 <artifactId>org.wso2.carbon.identity.local.auth.api.core</artifactId>
                 <version>${carbon.identity.local.auth.api.version}</version>
             </dependency>
-            
-            <!-- Webapp Dependencies -->
-            <dependency>
-                <groupId>io.swagger</groupId>
-                <artifactId>swagger-jaxrs</artifactId>
-                <version>${swagger.jaxrs.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>jstl</groupId>
-                <artifactId>jstl</artifactId>
-                <version>${jstl.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.slf4j</groupId>
-                <artifactId>slf4j-api</artifactId>
-                <version>${slf4j.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>javax.servlet</groupId>
-                <artifactId>javax.servlet-api</artifactId>
-                <version>4.0.1</version>
-            </dependency>
-            <dependency>
-                <groupId>com.github.spotbugs</groupId>
-                <artifactId>spotbugs-annotations</artifactId>
-                <version>${spotbugs.annotations.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.json.wso2</groupId>
-                <artifactId>json</artifactId>
-                <version>${json.wso2.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>commons-io.wso2</groupId>
-                <artifactId>commons-io</artifactId>
-                <version>${commons.io.wso2.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.apache.commons</groupId>
-                <artifactId>commons-lang3</artifactId>
-                <version>${commons.lang3.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.wso2.orbit.org.owasp.encoder</groupId>
-                <artifactId>encoder</artifactId>
-                <version>${encoder.wso2.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.wso2.orbit.org.apache.httpcomponents</groupId>
-                <artifactId>httpclient</artifactId>
-                <version>${httpclient.wso2.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.apache.httpcomponents.wso2</groupId>
-                <artifactId>httpcore</artifactId>
-                <version>${httpcore.wso2.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.apache.taglibs</groupId>
-                <artifactId>taglibs-standard-impl</artifactId>
-                <version>${taglibs.standard.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.apache.taglibs</groupId>
-                <artifactId>taglibs-standard-spec</artifactId>
-                <version>${taglibs.standard.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.apache.tomcat</groupId>
-                <artifactId>tomcat-catalina</artifactId>
-                <version>${tomcat.catalina.version}</version>
-            </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -250,11 +163,6 @@
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-war-plugin</artifactId>
                     <version>${maven.war.plugin.version}</version>
-                </plugin>
-                <plugin>
-                    <groupId>com.github.spotbugs</groupId>
-                    <artifactId>spotbugs-maven-plugin</artifactId>
-                    <version>${spotbugs.maven.plugin.version}</version>
                 </plugin>
             </plugins>
         </pluginManagement>
