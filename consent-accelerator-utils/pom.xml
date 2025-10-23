@@ -62,6 +62,7 @@
                         <Bundle-SymbolicName>${project.artifactId}</Bundle-SymbolicName>
                         <Bundle-Name>${project.artifactId}</Bundle-Name>
                         <Import-Package>
+                            javax.servlet.http;version="[2.6.0,5.0.0)";resolution:=optional,
                             org.osgi.framework,
                             *;resolution:=optional
                         </Import-Package>
@@ -69,6 +70,8 @@
                             com.wso2.consent.accelerator.*; version="${project.version}"
                         </Export-Package>
                         <DynamicImport-Package>*</DynamicImport-Package>
+                        <_noee>true</_noee>
+                        <_contract>!*</_contract>
                     </instructions>
                 </configuration>
             </plugin>

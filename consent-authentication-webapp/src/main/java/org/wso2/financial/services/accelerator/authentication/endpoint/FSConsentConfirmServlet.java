@@ -130,6 +130,9 @@ public class FSConsentConfirmServlet extends HttpServlet {
 
         String user = cachedDataSet.getString("user");
         String consentId = cachedDataSet.getString("consent_id");
+
+        browserCookies.put("consentId", consentId);
+
         boolean approval = request.getParameter("consent") != null &&
                 request.getParameter("consent").equals("true");
 

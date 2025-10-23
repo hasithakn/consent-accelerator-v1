@@ -30,6 +30,7 @@ import org.wso2.carbon.identity.oauth2.authz.OAuthAuthzReqMessageContext;
 import org.wso2.carbon.identity.oauth2.authz.handlers.HybridResponseTypeHandler;
 import org.wso2.carbon.identity.oauth2.dto.OAuth2AuthorizeRespDTO;
 
+import javax.servlet.http.Cookie;
 import java.util.Arrays;
 
 /**
@@ -83,9 +84,17 @@ public class ConsentHybridResponseTypeHandler extends HybridResponseTypeHandler 
                 // Extract consent ID from essential claims
                 String consentId = extractConsentIdFromEssentialClaims(oAuthAuthzReqMessageContext);
 
+                // If consent ID is empty, try to get it from cookies
                 if (StringUtils.isEmpty(consentId)) {
-                    log.warn("Consent-ID retrieved from request is empty");
-                    return scopes;
+                    log.debug("Consent ID not found in essential claims, trying to retrieve from cookies");
+                    consentId = extractConsentIdFromCookies(oAuthAuthzReqMessageContext);
+                    
+                    if (StringUtils.isEmpty(consentId)) {
+                        log.warn("Consent ID not found in both essential claims and cookies");
+                        return scopes;
+                    } else {
+                        log.debug("Consent ID retrieved from cookies: " + consentId.replaceAll("[\r\n]", ""));
+                    }
                 }
 
                 String consentIdClaim = "consent_id_";
@@ -158,6 +167,50 @@ public class ConsentHybridResponseTypeHandler extends HybridResponseTypeHandler 
             return "";
         } catch (Exception e) {
             log.error("Error extracting consent ID from essential claims: " + e.getMessage().replaceAll("[\r\n]", ""), e);
+            return "";
+        }
+    }
+
+    /**
+     * Extract consent ID from cookies in the authorization request.
+     *
+     * @param oAuthAuthzReqMessageContext OAuth authorization request message context
+     * @return Consent ID from cookies or empty string if not found
+     */
+    private static String extractConsentIdFromCookies(OAuthAuthzReqMessageContext oAuthAuthzReqMessageContext) {
+        
+        try {
+            // Get the HTTP servlet request from the context
+            javax.servlet.http.HttpServletRequest request = 
+                oAuthAuthzReqMessageContext.getAuthorizationReqDTO().getHttpServletRequestWrapper();
+            
+            if (request == null) {
+                if (log.isDebugEnabled()) {
+                    log.debug("HTTP servlet request not available in OAuth context");
+                }
+                return "";
+            }
+
+            Cookie[] cookies = request.getCookies();
+            if (cookies != null) {
+                for (Cookie cookie : cookies) {
+                    if ("consentId".equals(cookie.getName())) {
+                        String consentId = cookie.getValue();
+                        if (log.isDebugEnabled()) {
+                            log.debug("Found consent ID in cookie: " + consentId.replaceAll("[\r\n]", ""));
+                        }
+                        return consentId;
+                    }
+                }
+            }
+
+            if (log.isDebugEnabled()) {
+                log.debug("Consent ID cookie not found");
+            }
+            return "";
+
+        } catch (Exception e) {
+            log.error("Error extracting consent ID from cookies: " + e.getMessage().replaceAll("[\r\n]", ""), e);
             return "";
         }
     }
