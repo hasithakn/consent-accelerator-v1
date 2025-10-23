@@ -56,6 +56,10 @@
                                                 <h4 class="section-heading-5 ui subheading">${dataRequested}</h4>
                                             </c:if>
 
+                                            <c:if test="${empty permissions}">
+                                                <%-- If permissions are not specified --%>
+                                                <jsp:include page="includes/accounts.jsp"/>
+                                            </c:if>
                                             <%--Display basic consent data--%>
                                             <jsp:include page="includes/basic-consent-data.jsp"/>
 
@@ -63,15 +67,11 @@
                                                 <%-- If permissions are specified --%>
                                                 <jsp:include page="includes/accounts-with-permissions.jsp"/>
                                             </c:if>
-                                            <c:if test="${empty permissions}">
-                                                <%-- If permissions are not specified --%>
-                                                <jsp:include page="includes/accounts.jsp"/>
-                                            </c:if>
+
                                         </div>
                                     </div>
 
                                     <jsp:include page="includes/confirmation-dialogue.jsp"/>
-                                    <jsp:include page="includes/privacy-footer.jsp"/>
                                 </div>
                             </form>
                         </div>

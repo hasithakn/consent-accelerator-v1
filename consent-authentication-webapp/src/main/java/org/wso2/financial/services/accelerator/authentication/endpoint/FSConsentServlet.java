@@ -72,183 +72,404 @@ public class FSConsentServlet extends HttpServlet {
     public void doGet(HttpServletRequest originalRequest, HttpServletResponse response)
             throws IOException, ServletException {
 
-        HttpServletRequest request = originalRequest;
-        String user = "";
-        // get consent data
-        String sessionDataKey = request.getParameter(Constants.SESSION_DATA_KEY_CONSENT);
+        String sessionDataKey = originalRequest.getParameter(Constants.SESSION_DATA_KEY_CONSENT);
 
-        // validating session data key format
-        try {
-            UUID.fromString(sessionDataKey);
-        } catch (IllegalArgumentException e) {
-            log.error("Invalid session data key", e);
-            request.getSession().invalidate();
+        // Validating session data key format
+        if (!isValidSessionDataKey(sessionDataKey)) {
+            log.error("Invalid session data key");
+            originalRequest.getSession().invalidate();
             response.sendRedirect("retry.do?status=Error&statusMsg=Invalid session data key");
             return;
         }
 
         HttpResponse consentDataResponse = getConsentDataWithKey(sessionDataKey, getServletContext());
-        JSONObject dataSet = new JSONObject();
-        log.debug("HTTP response for consent retrieval" + consentDataResponse.toString());
-        try {
-            if (consentDataResponse.getStatusLine().getStatusCode() == HttpURLConnection.HTTP_MOVED_TEMP &&
-                    consentDataResponse.getLastHeader(Constants.LOCATION) != null) {
-                response.sendRedirect(consentDataResponse.getLastHeader(Constants.LOCATION).getValue());
-                return;
-            } else {
-                String retrievalResponse = IOUtils.toString(consentDataResponse.getEntity().getContent(),
-                        String.valueOf(StandardCharsets.UTF_8));
-                JSONObject sessionData = new JSONObject(retrievalResponse);
+        log.debug("HTTP response for consent retrieval: " + consentDataResponse.toString());
 
-                // get consent details
-                String requestObject = null;
-                String consentId = null;
-                user = sessionData.getString("loggedInUser");
-                if (sessionData.has("spQueryParams")) {
-                    String spQueryParams = sessionData.getString("spQueryParams");
-                    // Extract the request parameter from the query string
-                    String[] params = spQueryParams.split("&");
-                    for (String param : params) {
-                        if (param.startsWith("request=")) {
-                            requestObject = param.substring("request=".length());
-                            // URL decode the request object
-                            requestObject = java.net.URLDecoder.decode(requestObject, StandardCharsets.UTF_8.toString());
-                            log.debug("Extracted request object: " + requestObject);
-
-                            // Decode JWT to extract consent_id
-                            try {
-                                // JWT has three parts separated by dots: header.payload.signature
-                                String[] jwtParts = requestObject.split("\\.");
-                                if (jwtParts.length >= 2) {
-                                    // Decode the payload (second part)
-                                    String payload = new String(Base64.getUrlDecoder().decode(jwtParts[1]),
-                                            StandardCharsets.UTF_8);
-                                    log.debug("Decoded JWT payload: " + payload);
-
-                                    JSONObject jwtPayload = new JSONObject(payload);
-
-                                    // Extract consent_id from claims.id_token.openbanking_intent_id.value
-                                    if (jwtPayload.has("claims")) {
-                                        JSONObject claims = jwtPayload.getJSONObject("claims");
-                                        if (claims.has("id_token")) {
-                                            JSONObject idToken = claims.getJSONObject("id_token");
-                                            if (idToken.has("openbanking_intent_id")) {
-                                                JSONObject intentId = idToken.getJSONObject("openbanking_intent_id");
-                                                if (intentId.has("value")) {
-                                                    consentId = intentId.getString("value");
-                                                    log.info("Extracted consent_id from request object: " + consentId);
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            } catch (Exception e) {
-                                log.error("Error decoding JWT request object", e);
-                            }
-                            break;
-                        }
-                    }
-                }
-
-                // Fetch consent details from external API if consent_id is available
-                JSONObject consentDetails = null;
-                JSONObject transformedConsentData = null;
-                if (consentId != null && !consentId.isEmpty()) {
-                    try {
-                        consentDetails = fetchConsentDetails(consentId, getServletContext());
-                        if (consentDetails != null) {
-                            log.info("Successfully fetched consent details for consent_id: " + consentId);
-
-                            if (!consentDetails.getString("status").equalsIgnoreCase("awaitingAuthorization")) {
-                                response.sendRedirect("retry.do?status=Error&statusMsg=invalid_consent_status");
-                                return;
-                            }
-                            // Transform consent details to required format
-                            transformedConsentData = transformConsentDetails(consentDetails, sessionData);
-                            transformedConsentData.append("consent_id", consentId);
-
-                            // Merge transformed consent sessionData into the main sessionData object
-                            if (transformedConsentData != null) {
-                                sessionData.put("consentData", transformedConsentData.get("consentData"));
-                                sessionData.put("consumerData", transformedConsentData.get("consumerData"));
-                                // Update type if available
-                                if (transformedConsentData.has("type")) {
-                                    sessionData.put("type", transformedConsentData.get("type"));
-                                }
-                                log.debug("Transformed consent sessionData: " + transformedConsentData.toString());
-                            }
-                        }
-                    } catch (IOException e) {
-                        log.error("Error fetching consent details for consent_id: " + consentId, e);
-                        // Continue processing even if consent details fetch fails
-                    }
-                }
-
-
-                String errorResponse = AuthenticationUtils.getErrorResponseForRedirectURL(sessionData);
-                if (sessionData.has(Constants.REDIRECT_URI) && StringUtils.isNotEmpty(errorResponse)) {
-                    URI errorURI = new URI(sessionData.get(Constants.REDIRECT_URI).toString().concat(errorResponse));
-                    response.sendRedirect(errorURI.toString());
-                    return;
-                } else {
-                    dataSet = createConsentDataset(transformedConsentData, consentDataResponse.getStatusLine().getStatusCode());
-                }
-            }
-        } catch (IOException e) {
-            log.error("Exception occurred while retrieving consent data", e);
-            dataSet.put(Constants.IS_ERROR, "Exception occurred while retrieving consent data");
-        } catch (URISyntaxException e) {
-            log.error("Error while constructing URI for redirection", e);
-            dataSet.put(Constants.IS_ERROR, "Error while constructing URI for redirection");
-        } catch (JSONException e) {
-            log.error("Error while parsing the response", e);
-            dataSet.put(Constants.IS_ERROR, "Error while parsing the response");
-        }
-        if (dataSet.has(Constants.IS_ERROR)) {
-            String isError = (String) dataSet.get(Constants.IS_ERROR);
-            request.getSession().invalidate();
-            response.sendRedirect("retry.do?status=Error&statusMsg=" + isError);
+        // Handle redirect response
+        if (shouldRedirect(consentDataResponse)) {
+            response.sendRedirect(consentDataResponse.getLastHeader(Constants.LOCATION).getValue());
             return;
         }
 
-        // set variables to session
-        HttpSession session = request.getSession();
+        try {
+            // Parse session data from response
+            JSONObject sessionData = parseSessionData(consentDataResponse);
+            String user = sessionData.getString("loggedInUser");
 
+            // Determine flow based on request parameter presence
+            String requestObject = extractRequestParameter(sessionData);
+            JSONObject dataSet;
+
+            if (requestObject != null && !requestObject.isEmpty()) {
+                // Flow 1: Handle JWT request parameter flow
+                log.info("Processing JWT request parameter flow");
+                dataSet = handleJwtRequestFlow(sessionData, requestObject, consentDataResponse.getStatusLine().getStatusCode(), response);
+            } else {
+                // Flow 2: Handle standard consent flow (without JWT request)
+                log.info("Processing standard consent flow");
+                dataSet = handleStandardConsentFlow(sessionData, consentDataResponse.getStatusLine().getStatusCode(), response);
+            }
+
+            // Check for errors
+            if (dataSet == null || dataSet.has(Constants.IS_ERROR)) {
+                handleError(originalRequest, response, dataSet);
+                return;
+            }
+
+            // Prepare and forward to JSP
+            prepareAndForwardToJSP(originalRequest, response, sessionDataKey, dataSet, user);
+
+        } catch (Exception e) {
+            log.error("Exception occurred while processing consent", e);
+            handleError(originalRequest, response,
+                new JSONObject().put(Constants.IS_ERROR, "Exception occurred: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Validates the session data key format.
+     *
+     * @param sessionDataKey the session data key to validate
+     * @return true if valid, false otherwise
+     */
+    private boolean isValidSessionDataKey(String sessionDataKey) {
+        try {
+            UUID.fromString(sessionDataKey);
+            return true;
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
+
+    /**
+     * Checks if the response requires a redirect.
+     *
+     * @param response the HTTP response
+     * @return true if redirect is needed
+     */
+    private boolean shouldRedirect(HttpResponse response) {
+        return response.getStatusLine().getStatusCode() == HttpURLConnection.HTTP_MOVED_TEMP &&
+               response.getLastHeader(Constants.LOCATION) != null;
+    }
+
+    /**
+     * Parses session data from the HTTP response.
+     *
+     * @param consentDataResponse the HTTP response containing session data
+     * @return parsed JSONObject
+     * @throws IOException if parsing fails
+     */
+    private JSONObject parseSessionData(HttpResponse consentDataResponse) throws IOException {
+        String retrievalResponse = IOUtils.toString(consentDataResponse.getEntity().getContent(),
+                String.valueOf(StandardCharsets.UTF_8));
+        return new JSONObject(retrievalResponse);
+    }
+
+    /**
+     * Extracts the request parameter from spQueryParams.
+     *
+     * @param sessionData the session data JSON object
+     * @return the request parameter value, or null if not found
+     */
+    private String extractRequestParameter(JSONObject sessionData) {
+        if (!sessionData.has("spQueryParams")) {
+            return null;
+        }
+
+        String spQueryParams = sessionData.getString("spQueryParams");
+        String[] params = spQueryParams.split("&");
+
+        for (String param : params) {
+            if (param.startsWith("request=")) {
+                try {
+                    String requestObject = param.substring("request=".length());
+                    // URL decode the request object
+                    requestObject = java.net.URLDecoder.decode(requestObject, StandardCharsets.UTF_8.toString());
+                    log.debug("Extracted request object: " + requestObject);
+                    return requestObject;
+                } catch (Exception e) {
+                    log.error("Error extracting request parameter", e);
+                    return null;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Handles the JWT request parameter flow.
+     *
+     * @param sessionData the session data
+     * @param requestObject the JWT request object
+     * @param statusCode the HTTP status code
+     * @param response the HTTP response
+     * @return the processed consent dataset
+     * @throws IOException if processing fails
+     * @throws URISyntaxException if URI construction fails
+     */
+    private JSONObject handleJwtRequestFlow(JSONObject sessionData, String requestObject,
+                                           int statusCode, HttpServletResponse response)
+            throws IOException, URISyntaxException {
+
+        // Extract consent ID from JWT
+        String consentId = extractConsentIdFromJwt(requestObject);
+
+        if (consentId == null || consentId.isEmpty()) {
+            log.warn("No consent ID found in JWT request object");
+            return createConsentDataset(sessionData, statusCode);
+        }
+
+        log.info("Extracted consent_id from request object: " + consentId);
+
+        // Fetch and process consent details
+        JSONObject consentDetails = fetchConsentDetails(consentId, getServletContext());
+
+        if (consentDetails == null) {
+            log.error("Failed to fetch consent details for consent_id: " + consentId);
+            return new JSONObject().put(Constants.IS_ERROR, "Failed to fetch consent details");
+        }
+
+        // Validate consent status
+        if (!consentDetails.getString("status").equalsIgnoreCase("CREATED")) {
+            response.sendRedirect("retry.do?status=Error&statusMsg=invalid_consent_status");
+            return null;
+        }
+
+        // Transform and merge consent data
+        JSONObject transformedConsentData = transformConsentDetails(consentDetails, sessionData);
+        if (transformedConsentData != null) {
+            transformedConsentData.put("consent_id", consentId);
+            mergeConsentData(sessionData, transformedConsentData);
+            log.debug("Transformed consent data: " + transformedConsentData.toString());
+        }
+
+        // Check for error redirects
+        String errorResponse = AuthenticationUtils.getErrorResponseForRedirectURL(sessionData);
+        if (sessionData.has(Constants.REDIRECT_URI) && StringUtils.isNotEmpty(errorResponse)) {
+            URI errorURI = new URI(sessionData.get(Constants.REDIRECT_URI).toString().concat(errorResponse));
+            response.sendRedirect(errorURI.toString());
+            return null;
+        }
+
+        return createConsentDataset(transformedConsentData, statusCode);
+    }
+
+    /**
+     * Handles the standard consent flow (without JWT request parameter).
+     *
+     * @param sessionData the session data
+     * @param statusCode the HTTP status code
+     * @param response the HTTP response
+     * @return the processed consent dataset
+     * @throws IOException if processing fails
+     * @throws URISyntaxException if URI construction fails
+     */
+    private JSONObject handleStandardConsentFlow(JSONObject sessionData, int statusCode,
+                                                 HttpServletResponse response)
+            throws IOException, URISyntaxException {
+
+        // Debug: Log available fields in sessionData
+        log.debug("Standard flow - Available session data keys: " + sessionData.keys().toString());
+
+        // Extract purpose strings from scopes (use optString to avoid exception if missing)
+        String scopesString = sessionData.optString("scopes", "");
+
+        if (scopesString.isEmpty()) {
+            log.warn("No scopes found in session data, attempting to retrieve from spQueryParams");
+            // Try to extract scopes from spQueryParams if available
+            if (sessionData.has("spQueryParams")) {
+                String spQueryParams = sessionData.getString("spQueryParams");
+                // Parse query params for scope parameter
+                String[] params = spQueryParams.split("&");
+                for (String param : params) {
+                    if (param.startsWith("scope=")) {
+                        scopesString = java.net.URLDecoder.decode(param.substring(6), "UTF-8");
+                        log.debug("Extracted scopes from spQueryParams: " + scopesString);
+                        break;
+                    }
+                }
+            }
+        }
+
+        String[] purposeStrings = extractPurposesFromScopes(scopesString);
+
+        if (purposeStrings == null || purposeStrings.length == 0) {
+            log.warn("No purpose strings found in session data, creating default consent dataset");
+            return createConsentDataset(sessionData, statusCode);
+        }
+
+        log.info("Extracted purpose strings from session data: " + Arrays.toString(purposeStrings));
+
+        // Create consent instead of fetching
+        JSONObject consentDetails = createConsent(purposeStrings, sessionData, getServletContext());
+
+        if (consentDetails == null) {
+            log.error("Failed to create consent");
+            return new JSONObject().put(Constants.IS_ERROR, "Failed to create consent");
+        }
+
+        // Extract the created consent ID
+        String consentId = consentDetails.optString("consentId", null);
+        if (consentId == null || consentId.isEmpty()) {
+            log.error("Consent created but no consent ID returned");
+            return new JSONObject().put(Constants.IS_ERROR, "Failed to retrieve consent ID");
+        }
+
+        log.info("Successfully created consent with ID: " + consentId);
+
+        // Validate consent status
+        if (!consentDetails.getString("status").equalsIgnoreCase("CREATED")) {
+            response.sendRedirect("retry.do?status=Error&statusMsg=invalid_consent_status");
+            return null;
+        }
+
+        // Transform and merge consent data
+        JSONObject transformedConsentData = transformConsentDetails(consentDetails, sessionData);
+        if (transformedConsentData != null) {
+            transformedConsentData.put("consent_id", consentId);
+            mergeConsentData(sessionData, transformedConsentData);
+            log.debug("Transformed consent data: " + transformedConsentData.toString());
+        }
+
+        // Check for error redirects
+        String errorResponse = AuthenticationUtils.getErrorResponseForRedirectURL(sessionData);
+        if (sessionData.has(Constants.REDIRECT_URI) && StringUtils.isNotEmpty(errorResponse)) {
+            URI errorURI = new URI(sessionData.get(Constants.REDIRECT_URI).toString().concat(errorResponse));
+            response.sendRedirect(errorURI.toString());
+            return null;
+        }
+
+        return createConsentDataset(transformedConsentData, statusCode);
+    }
+
+    /**
+     * Extracts consent ID from JWT request object.
+     *
+     * @param requestObject the JWT request object
+     * @return the consent ID, or null if not found
+     */
+    private String extractConsentIdFromJwt(String requestObject) {
+        try {
+            // JWT has three parts separated by dots: header.payload.signature
+            String[] jwtParts = requestObject.split("\\.");
+            if (jwtParts.length < 2) {
+                log.warn("Invalid JWT format");
+                return null;
+            }
+
+            // Decode the payload (second part)
+            String payload = new String(Base64.getUrlDecoder().decode(jwtParts[1]), StandardCharsets.UTF_8);
+            log.debug("Decoded JWT payload: " + payload);
+
+            JSONObject jwtPayload = new JSONObject(payload);
+
+            // Extract consent_id from claims.id_token.openbanking_intent_id.value
+            if (jwtPayload.has("claims")) {
+                JSONObject claims = jwtPayload.getJSONObject("claims");
+                if (claims.has("id_token")) {
+                    JSONObject idToken = claims.getJSONObject("id_token");
+                    if (idToken.has("openbanking_intent_id")) {
+                        JSONObject intentId = idToken.getJSONObject("openbanking_intent_id");
+                        if (intentId.has("value")) {
+                            return intentId.getString("value");
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.error("Error decoding JWT request object", e);
+        }
+        return null;
+    }
+
+    /**
+     * Merges transformed consent data into session data.
+     *
+     * @param sessionData the original session data
+     * @param transformedConsentData the transformed consent data to merge
+     */
+    private void mergeConsentData(JSONObject sessionData, JSONObject transformedConsentData) {
+        if (transformedConsentData == null) {
+            return;
+        }
+
+        if (transformedConsentData.has("consentData")) {
+            sessionData.put("consentData", transformedConsentData.get("consentData"));
+        }
+        if (transformedConsentData.has("consumerData")) {
+            sessionData.put("consumerData", transformedConsentData.get("consumerData"));
+        }
+        if (transformedConsentData.has("type")) {
+            sessionData.put("type", transformedConsentData.get("type"));
+        }
+    }
+
+    /**
+     * Handles error scenarios and redirects appropriately.
+     *
+     * @param request the HTTP request
+     * @param response the HTTP response
+     * @param dataSet the dataset containing error information
+     * @throws IOException if redirect fails
+     */
+    private void handleError(HttpServletRequest request, HttpServletResponse response,
+                            JSONObject dataSet) throws IOException {
+        String errorMessage = "Unknown error";
+
+        if (dataSet != null && dataSet.has(Constants.IS_ERROR)) {
+            errorMessage = dataSet.getString(Constants.IS_ERROR);
+        }
+
+        request.getSession().invalidate();
+        response.sendRedirect("retry.do?status=Error&statusMsg=" + errorMessage);
+    }
+
+    /**
+     * Prepares request attributes and forwards to JSP.
+     *
+     * @param request the HTTP request
+     * @param response the HTTP response
+     * @param sessionDataKey the session data key
+     * @param dataSet the consent dataset
+     * @param user the logged-in user
+     * @throws ServletException if forwarding fails
+     * @throws IOException if forwarding fails
+     */
+    private void prepareAndForwardToJSP(HttpServletRequest request, HttpServletResponse response,
+                                       String sessionDataKey, JSONObject dataSet, String user)
+            throws ServletException, IOException {
+
+        // Set variables to session
+        HttpSession session = request.getSession();
         session.setAttribute(Constants.SESSION_DATA_KEY_CONSENT, Encode.forJava(sessionDataKey));
         session.setAttribute(Constants.DISPLAY_SCOPES,
                 Boolean.parseBoolean(getServletContext().getInitParameter(Constants.DISPLAY_SCOPES)));
 
-        // set strings to request
-        ResourceBundle resourceBundle = AuthenticationUtils.getResourceBundle(request.getLocale());
-
-        originalRequest.setAttribute(Constants.PRIVACY_DESCRIPTION, Constants.PRIVACY_DESCRIPTION_KEY);
-        originalRequest.setAttribute(Constants.PRIVACY_GENERAL, Constants.PRIVACY_GENERAL_KEY);
-
-        // bottom.jsp
-        originalRequest.setAttribute(Constants.OK, Constants.OK);
-        originalRequest.setAttribute(Constants.REQUESTED_SCOPES, Constants.REQUESTED_SCOPES_KEY);
-
-        originalRequest.setAttribute(Constants.APP, dataSet.getString(Constants.APPLICATION));
+        // Set strings to request
+        request.setAttribute(Constants.PRIVACY_DESCRIPTION, Constants.PRIVACY_DESCRIPTION_KEY);
+        request.setAttribute(Constants.PRIVACY_GENERAL, Constants.PRIVACY_GENERAL_KEY);
+        request.setAttribute(Constants.OK, Constants.OK);
+        request.setAttribute(Constants.REQUESTED_SCOPES, Constants.REQUESTED_SCOPES_KEY);
+        request.setAttribute(Constants.APP, dataSet.getString(Constants.APPLICATION));
 
         // Pass custom values to JSP
-
         List<String> accountsData = addAccList(dataSet);
-        originalRequest.setAttribute("basicConsentData", "Details of the consent:");
-        originalRequest.setAttribute("user", user);
-        originalRequest.setAttribute("expirationTime", dataSet.getJSONObject("consentData")
-                .getJSONObject("basicConsentData").getJSONArray("Expiration Date Time").get(0));
-        originalRequest.setAttribute("consumerAccounts", accountsData);
-        // dispatch
-        dataSet.append("user", user);
+        String applicationName = dataSet.getString(Constants.APPLICATION);
+        request.setAttribute("basicConsentData", applicationName + " application is requesting your consent to access the following data: ");
+        request.setAttribute("user", user);
+        request.setAttribute("consumerAccounts", accountsData);
+
+        // Add user to dataset
+        dataSet.put("user", user);
 
         // Store dataSet in cache with sessionDataKey as the key
         LocalCacheUtil cache = LocalCacheUtil.getInstance();
         cache.put(sessionDataKey, dataSet);
         log.info("Stored dataSet in cache with key: {}", sessionDataKey);
 
+        // Forward to JSP
         RequestDispatcher dispatcher = this.getServletContext().getRequestDispatcher("/fs_default.jsp");
-        dispatcher.forward(originalRequest, response);
-
+        dispatcher.forward(request, response);
     }
 
     private static List<String> addAccList(JSONObject dataSet) {
@@ -357,6 +578,146 @@ public class FSConsentServlet extends HttpServlet {
     }
 
     /**
+     * Create a new consent via external API.
+     *
+     * @param purposeStrings the purposes/permissions for the consent
+     * @param sessionData    the session data containing app and user info
+     * @param servletContext servlet context
+     * @return created consent details JSON object
+     * @throws IOException if an error occurs while creating consent
+     */
+    JSONObject createConsent(String[] purposeStrings, JSONObject sessionData, ServletContext servletContext)
+            throws IOException {
+
+        // Construct the consent API URL (without trailing slash to avoid 307 redirect)
+        String consentApiBaseURL = servletContext.getInitParameter("ConsentAPIBaseURL");
+        if (consentApiBaseURL == null || consentApiBaseURL.isEmpty()) {
+            // Use default URL if not configured
+            consentApiBaseURL = "http://localhost:3000/api/v1/consents";
+        }
+        // Remove trailing slash if present
+        consentApiBaseURL = consentApiBaseURL.replaceAll("/$", "");
+
+        // Create HTTP client that follows redirects
+        CloseableHttpClient client = HttpClientBuilder.create()
+                .setRedirectStrategy(new org.apache.http.impl.client.LaxRedirectStrategy())
+                .build();
+        org.apache.http.client.methods.HttpPost consentRequest =
+            new org.apache.http.client.methods.HttpPost(consentApiBaseURL);
+
+        // Add required headers
+        String orgId = servletContext.getInitParameter("ConsentAPI.OrgId");
+        String clientId = sessionData.optString("application",
+                            servletContext.getInitParameter("ConsentAPI.ClientId"));
+        String userId = sessionData.optString("loggedInUser", "user");
+
+        consentRequest.addHeader("org-id", orgId != null ? orgId : "org1");
+        consentRequest.addHeader("client-id", clientId != null ? clientId : "string");
+        consentRequest.addHeader("Content-Type", "application/json");
+        consentRequest.addHeader("Accept", "application/json");
+
+        // Build request payload
+        JSONObject requestPayload = new JSONObject();
+        JSONObject data = new JSONObject();
+
+        // Add permissions from purpose strings
+        JSONArray permissions = new JSONArray();
+        for (String purpose : purposeStrings) {
+            permissions.put(purpose);
+        }
+        data.put("Permissions", permissions);
+
+        requestPayload.put("Data", data);
+
+        // Create the full consent creation request
+        JSONObject consentCreationRequest = new JSONObject();
+        consentCreationRequest.put("type", "gov");
+        consentCreationRequest.put("clientId", clientId);
+        consentCreationRequest.put("userId", userId);
+        consentCreationRequest.put("requestPayload", requestPayload);
+        consentCreationRequest.put("status", "CREATED");
+
+        // Set request entity
+        org.apache.http.entity.StringEntity entity = new org.apache.http.entity.StringEntity(
+                consentCreationRequest.toString(), StandardCharsets.UTF_8);
+        consentRequest.setEntity(entity);
+
+        log.info("Creating consent at URL: " + consentApiBaseURL);
+        log.info("Request payload: " + consentCreationRequest.toString());
+
+        HttpResponse consentResponse = client.execute(consentRequest);
+
+        // Parse and return the response
+        int statusCode = consentResponse.getStatusLine().getStatusCode();
+
+        // Read response body
+        String responseBody = "";
+        if (consentResponse.getEntity() != null) {
+            responseBody = IOUtils.toString(consentResponse.getEntity().getContent(),
+                    String.valueOf(StandardCharsets.UTF_8));
+        }
+
+        log.info("Consent creation response - Status: " + statusCode +
+                 ", Reason: " + consentResponse.getStatusLine().getReasonPhrase() +
+                 ", Body length: " + responseBody.length());
+
+        if (statusCode == HttpURLConnection.HTTP_OK || statusCode == HttpURLConnection.HTTP_CREATED) {
+            if (responseBody.isEmpty()) {
+                log.error("Consent creation returned success but empty response body");
+                return null;
+            }
+
+            try {
+                JSONObject createdConsent = new JSONObject(responseBody);
+                log.info("Successfully created consent. Response keys: " + createdConsent.keys().toString());
+                log.info("Full response: " + responseBody);
+
+                // Normalize the consent ID field name
+                // API might return 'id', '_id', or 'consentId'
+                if (!createdConsent.has("consentId")) {
+                    if (createdConsent.has("_id")) {
+                        createdConsent.put("consentId", createdConsent.getString("_id"));
+                        log.info("Normalized '_id' to 'consentId': " + createdConsent.getString("_id"));
+                    } else if (createdConsent.has("id")) {
+                        createdConsent.put("consentId", createdConsent.getString("id"));
+                        log.info("Normalized 'id' to 'consentId': " + createdConsent.getString("id"));
+                    } else {
+                        log.warn("Response does not contain any consent ID field (_id, id, or consentId)");
+                    }
+                }
+
+                return createdConsent;
+            } catch (JSONException e) {
+                log.error("Failed to parse consent response as JSON: " + responseBody, e);
+                return null;
+            }
+        } else if (statusCode == HttpURLConnection.HTTP_MOVED_TEMP || statusCode == 307) {
+            // Handle redirect - log the location header
+            String location = consentResponse.getFirstHeader("Location") != null ?
+                             consentResponse.getFirstHeader("Location").getValue() : "no location header";
+            log.warn("Consent creation returned redirect (307). Location: " + location);
+            log.warn("Response body: " + responseBody);
+
+            // If there's a response body with consent info, try to use it
+            if (!responseBody.isEmpty()) {
+                try {
+                    JSONObject redirectResponse = new JSONObject(responseBody);
+                    log.info("Redirect response contains data: " + redirectResponse.keys().toString());
+                    return redirectResponse;
+                } catch (JSONException e) {
+                    log.error("Redirect response is not valid JSON: " + responseBody);
+                }
+            }
+            return null;
+        } else {
+            log.error("Failed to create consent. Status code: " + statusCode +
+                     ", Reason: " + consentResponse.getStatusLine().getReasonPhrase() +
+                     ", Response: " + responseBody);
+            return null;
+        }
+    }
+
+    /**
      * Transform consent details from external API format to required format.
      *
      * @param consentDetails the consent details from external API
@@ -416,12 +777,15 @@ public class FSConsentServlet extends HttpServlet {
                     if (requestData.has("Permissions")) {
                         org.json.JSONArray permissions = requestData.getJSONArray("Permissions");
                         for (int i = 0; i < permissions.length(); i++) {
-                            JSONObject account = new JSONObject();
-                            account.put("accountId", JSONObject.NULL);
-                            account.put("displayName", permissions.getString(i));
-                            account.put("additionalProperties", new JSONObject());
-                            account.put("selected", JSONObject.NULL);
-                            accountsArray.put(account);
+                            String permission = permissions.getString(i);
+                            if (!permission.equalsIgnoreCase("gov")) {
+                                JSONObject account = new JSONObject();
+                                account.put("accountId", permission); // Keep original permission as accountId
+                                account.put("displayName", getPermissionDisplayName(permission));
+                                account.put("additionalProperties", new JSONObject());
+                                account.put("selected", JSONObject.NULL);
+                                accountsArray.put(account);
+                            }
                         }
                     }
                 }
@@ -442,5 +806,98 @@ public class FSConsentServlet extends HttpServlet {
             log.error("Error transforming consent details", e);
             return null;
         }
+    }
+
+    /**
+     * Map permission codes to user-friendly display names.
+     *
+     * @param permission the permission code
+     * @return user-friendly display name
+     */
+    private String getPermissionDisplayName(String permission) {
+        if (permission == null || permission.trim().isEmpty()) {
+            return permission;
+        }
+
+        // Map known permissions to display names
+        switch (permission.toLowerCase()) {
+            case "utility:read":
+                return "Utility Bills Information";
+            case "license:read":
+                return "Driver's License Information";
+            case "tax:read":
+                return "Tax Records Information";
+            default:
+                // For unknown permissions, convert to title case
+                return formatPermissionName(permission);
+        }
+    }
+
+    /**
+     * Format permission name to be more readable.
+     * Converts "some:permission" to "Some Permission"
+     *
+     * @param permission the permission code
+     * @return formatted permission name
+     */
+    private String formatPermissionName(String permission) {
+        if (permission == null || permission.trim().isEmpty()) {
+            return permission;
+        }
+
+        // Remove common suffixes like :read, :write, :delete
+        String cleanedPermission = permission.replaceAll(":(read|write|delete|update|create)", "");
+
+        // Replace common separators with spaces
+        cleanedPermission = cleanedPermission.replaceAll("[_:\\-.]", " ");
+
+        // Capitalize first letter of each word
+        String[] words = cleanedPermission.split("\\s+");
+        StringBuilder result = new StringBuilder();
+        for (String word : words) {
+            if (word.length() > 0) {
+                result.append(Character.toUpperCase(word.charAt(0)))
+                      .append(word.substring(1).toLowerCase())
+                      .append(" ");
+            }
+        }
+
+        return result.toString().trim();
+    }
+
+    /**
+     * Extract purpose strings from scopes.
+     * Scopes may be space-separated or comma-separated.
+     * Filters out common OAuth scopes (openid, profile, email, etc.)
+     * and consent_id_ scopes.
+     *
+     * @param scopesString the scopes string (space or comma separated)
+     * @return array of purpose strings
+     */
+    String[] extractPurposesFromScopes(String scopesString) {
+        if (scopesString == null || scopesString.trim().isEmpty()) {
+            return new String[0];
+        }
+
+        // Split by space or comma
+        String[] scopes = scopesString.trim().split("[\\s,]+");
+
+        // Filter out OAuth standard scopes and consent_id scopes
+        java.util.List<String> purposes = new java.util.ArrayList<>();
+        for (String scope : scopes) {
+            scope = scope.trim();
+            // Skip empty, standard OAuth scopes, and consent_id scopes
+            if (!scope.isEmpty() &&
+                !scope.equalsIgnoreCase("openid") &&
+                !scope.equalsIgnoreCase("profile") &&
+                !scope.equalsIgnoreCase("email") &&
+                !scope.equalsIgnoreCase("address") &&
+                !scope.equalsIgnoreCase("phone") &&
+                !scope.startsWith("consent_id_")) {
+                purposes.add(scope);
+            }
+        }
+
+        return purposes.toArray(new String[0]);
     }
 }

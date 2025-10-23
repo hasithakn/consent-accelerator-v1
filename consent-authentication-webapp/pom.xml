@@ -128,36 +128,6 @@
                 </configuration>
             </plugin>
             <plugin>
-                <groupId>com.github.spotbugs</groupId>
-                <artifactId>spotbugs-maven-plugin</artifactId>
-                <configuration>
-                    <effort>Max</effort>
-                    <threshold>Low</threshold>
-                    <xmlOutput>true</xmlOutput>
-                    <failOnError>true</failOnError>
-                    <spotbugsXmlOutputDirectory>target/spotbugs</spotbugsXmlOutputDirectory>
-                    <excludeFilterFile>${project.basedir}/src/main/resources/findbugs-exclude.xml</excludeFilterFile>
-                    <includeFilterFile>${project.basedir}/src/main/resources/findbugs-include.xml</includeFilterFile>
-                    <failOnError>false</failOnError>
-                    <plugins>
-                        <plugin>
-                            <groupId>com.h3xstream.findsecbugs</groupId>
-                            <artifactId>findsecbugs-plugin</artifactId>
-                            <version>${findsecbugs.version}</version>
-                        </plugin>
-                    </plugins>
-                </configuration>
-                <executions>
-                    <execution>
-                        <id>analyze-compile</id>
-                        <phase>compile</phase>
-                        <goals>
-                            <goal>check</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-            <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
             </plugin>

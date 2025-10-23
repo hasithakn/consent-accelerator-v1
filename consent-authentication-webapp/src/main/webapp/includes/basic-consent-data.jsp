@@ -19,19 +19,38 @@
 <%@ page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" %>
 <%@ taglib prefix = "c" uri = "http://java.sun.com/jsp/jstl/core" %>
 
-<c:if test="${not empty basicConsentData}">
-<%--    <c:forEach items="${basicConsentData}" var="record">--%>
-        <div class="padding" style="border:1px solid #555;">
-            <b>${basicConsentData}</b>
-        </div>
-<%--    </c:forEach>--%>
-</c:if>
+<!-- Consent Expiry Time Selector -->
+<div class="padding" style="margin-top: 15px;">
+    <label for="consentExpiry" style="font-weight: bold; display: block; margin-bottom: 8px;">
+        Consent Valid For:
+    </label>
+    <select id="consentExpiry" name="consentExpiry" class="form-control" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+        <option value="1">1 Day</option>
+        <option value="7">1 Week</option>
+        <option value="30" selected>1 Month</option>
+        <option value="90">3 Months</option>
+        <option value="180">6 Months</option>
+        <option value="365">1 Year</option>
+    </select>
+    <small style="display: block; margin-top: 5px; color: #666;">
+        Select how long this consent should remain valid
+    </small>
+</div>
 
-<c:if test="${not empty expirationTime}">
-    <%--    <c:forEach items="${basicConsentData}" var="record">--%>
-    <div class="padding" style="border:1px solid #555;">
-        <h5>Expiration Time:</h5>
-        <b>${expirationTime}</b>
-    </div>
-    <%--    </c:forEach>--%>
-</c:if>
+<!-- Data Access Duration Selector -->
+<div class="padding" style="margin-top: 15px;">
+    <label for="dataAccessDuration" style="font-weight: bold; display: block; margin-bottom: 8px;">
+        Historical Data Access:
+    </label>
+    <select id="dataAccessDuration" name="dataAccessDuration" class="form-control" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+        <option value="1">Previous 1 Day</option>
+        <option value="7">Previous 1 Week</option>
+        <option value="30" selected>Previous 1 Month</option>
+        <option value="90">Previous 3 Months</option>
+        <option value="180">Previous 6 Months</option>
+        <option value="365">Previous 1 Year</option>
+    </select>
+    <small style="display: block; margin-top: 5px; color: #666;">
+        Select how far back data can be accessed
+    </small>
+</div>

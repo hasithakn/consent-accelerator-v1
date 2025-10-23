@@ -23,7 +23,26 @@
 <c:set var="idSuffix" value="${param.idSuffix}" />
 <c:set var="ignorePreSelect" value="${param.ignorePreSelect}" />
 
-<div class="${accountSelectorClass}">
+<!-- Consent Page Heading -->
+<div style="margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #0078d4;">
+    <h2 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 600;">
+        Consent Authorization Request
+    </h2>
+    <p style="margin: 8px 0 0 0; color: #605e5c; font-size: 14px;">
+        Review and authorize the following information access
+    </p>
+</div>
+
+<!-- Application Consent Message -->
+<c:if test="${not empty basicConsentData}">
+<%--    <c:forEach items="${basicConsentData}" var="record">--%>
+        <div class="padding" style="border:1px solid #555; margin-bottom: 15px;">
+            <b>${basicConsentData}</b>
+        </div>
+<%--    </c:forEach>--%>
+</c:if>
+
+<div class="${accountSelectorClass}" style="margin-bottom: 25px;">
     <c:forEach items="${consumerAccounts}" var="account" varStatus="accountIdx">
         <%-- Display checkboxes for each account if multiple account selection is allowed --%>
         <label for="<c:choose><c:when test='${not empty idSuffix}'>${account}-${idSuffix}</c:when><c:otherwise>${account}</c:otherwise></c:choose>">
