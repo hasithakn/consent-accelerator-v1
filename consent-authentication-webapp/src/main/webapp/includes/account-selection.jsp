@@ -45,13 +45,13 @@
 <div class="${accountSelectorClass}" style="margin-bottom: 25px;">
     <c:forEach items="${consumerAccounts}" var="account" varStatus="accountIdx">
         <%-- Display checkboxes for each account if multiple account selection is allowed --%>
-        <label for="<c:choose><c:when test='${not empty idSuffix}'>${account}-${idSuffix}</c:when><c:otherwise>${account}</c:otherwise></c:choose>">
+        <label for="<c:choose><c:when test='${not empty idSuffix}'>${account.value}-${idSuffix}</c:when><c:otherwise>${account.value}</c:otherwise></c:choose>">
             <input type="checkbox"
-                id="<c:choose><c:when test='${not empty idSuffix}'>${account}-${idSuffix}</c:when><c:otherwise>${account}</c:otherwise></c:choose>"
+                id="<c:choose><c:when test='${not empty idSuffix}'>${account.value}-${idSuffix}</c:when><c:otherwise>${account.value}</c:otherwise></c:choose>"
                 name="<c:choose><c:when test='${not empty idSuffix}'>accounts-${idSuffix}</c:when><c:otherwise>accounts</c:otherwise></c:choose>"
-                value="${account}"
+                value="${account.value}"
             />
-            ${account}
+            ${account.label}
         </label>
         <br>
     </c:forEach>

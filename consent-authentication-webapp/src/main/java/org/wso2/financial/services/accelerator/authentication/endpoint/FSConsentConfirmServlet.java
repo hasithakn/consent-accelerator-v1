@@ -112,22 +112,30 @@ public class FSConsentConfirmServlet extends HttpServlet {
             browserCookies.put(cookie.getName(), cookie.getValue());
         }
 
-        // Capture selected accounts from the form submission
+        // Capture selected accounts and consent parameters from the form submission
+        
+        // Get data access duration (how far back in history)
+        String dataAccessDuration = request.getParameter("dataAccessDuration");
+        log.info("Data access duration selected: {} days", dataAccessDuration);
+        
+        // Get consent expiry (how long consent is valid)
+        String consentExpiry = request.getParameter("consentExpiry");
+        log.info("Consent expiry selected: {} days", consentExpiry);
 
         String[] selectedAccounts = request.getParameterValues("accounts");
         JSONObject selectedAccountsJson = new JSONObject();
         selectedAccountsJson.put("selected_accounts", selectedAccounts);
 
-        Object user = cachedDataSet.getJSONArray("user").getString(0);
-        Object consentId = cachedDataSet.getJSONArray("consent_id").getString(0);
+        String user = cachedDataSet.getString("user");
+        String consentId = cachedDataSet.getString("consent_id");
         boolean approval = request.getParameter("consent") != null &&
                 request.getParameter("consent").equals("true");
 
         // Fetch fresh consent details using consent ID if available
         JSONObject freshConsentDetails = null;
-        if (consentId != null && !consentId.toString().isEmpty()) {
+        if (consentId != null && !consentId.isEmpty()) {
             try {
-                freshConsentDetails = fetchConsentDetails(consentId.toString(), getServletContext());
+                freshConsentDetails = fetchConsentDetails(consentId, getServletContext());
                 if (freshConsentDetails != null) {
                     log.info("Successfully fetched fresh consent details for consent_id: {}", consentId);
                     log.debug("Fresh consent details: {}", freshConsentDetails.toString());
@@ -165,7 +173,54 @@ public class FSConsentConfirmServlet extends HttpServlet {
 
                 putPayload.put("authorizations", auth_resources);
 
-                boolean updateSuccess = updateConsent(consentId.toString(), putPayload, getServletContext());
+                // Calculate and add expiration timestamp based on consentExpiry
+                if (consentExpiry != null && !consentExpiry.isEmpty()) {
+                    try {
+                        int expiryDays = Integer.parseInt(consentExpiry);
+                        // Calculate future timestamp in seconds (Unix epoch time)
+                        long currentTimestamp = System.currentTimeMillis() / 1000; // Current time in seconds
+                        long expirySeconds = expiryDays * 24 * 60 * 60; // Convert days to seconds
+                        long validityTimestamp = currentTimestamp + expirySeconds;
+                        
+                        putPayload.put("validityTime", validityTimestamp);
+                        log.info("Set consent validity time to timestamp: {} (expires in {} days)", 
+                                validityTimestamp, expiryDays);
+                    } catch (NumberFormatException e) {
+                        log.warn("Invalid consentExpiry value: {}", consentExpiry);
+                    }
+                }
+
+                // Add data access validity duration (historical data access period in seconds)
+                if (dataAccessDuration != null && !dataAccessDuration.isEmpty()) {
+                    // Convert days to seconds for dataAccessValidityDuration
+                    if (!"all".equals(dataAccessDuration)) {
+                        try {
+                            int durationDays = Integer.parseInt(dataAccessDuration);
+                            // Convert days to seconds: days * 24 hours * 60 minutes * 60 seconds
+                            int durationSeconds = durationDays * 24 * 60 * 60;
+                            putPayload.put("dataAccessValidityDuration", durationSeconds);
+                            log.info("Set data access validity duration to: {} seconds ({} days)", 
+                                    durationSeconds, durationDays);
+                        } catch (NumberFormatException e) {
+                            log.warn("Invalid dataAccessDuration value: {}", dataAccessDuration);
+                        }
+                    } else {
+                        // For "all" data access, use a large number or special handling
+                        // You might want to use a very large number like 365 days * 10 years
+                        int maxDurationSeconds = 365 * 10 * 24 * 60 * 60; // 10 years
+                        putPayload.put("dataAccessValidityDuration", maxDurationSeconds);
+                        log.info("Set data access validity duration to maximum: {} seconds (all data)", 
+                                maxDurationSeconds);
+                    }
+                }
+
+                boolean updateSuccess = updateConsent(consentId, putPayload, getServletContext());
+                
+                if (updateSuccess) {
+                    log.info("Successfully updated consent with ID: {}", consentId);
+                } else {
+                    log.error("Failed to update consent with ID: {}", consentId);
+                }
 
             } catch (Exception e) {
                 log.error("Error updating consent status for consent_id: {}", consentId, e);
@@ -174,7 +229,7 @@ public class FSConsentConfirmServlet extends HttpServlet {
 
         URI aTrue = null;
         try {
-            aTrue = authorizeRequest("true", browserCookies, user.toString(), sessionDataKey);
+            aTrue = authorizeRequest("true", browserCookies, user, sessionDataKey);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }

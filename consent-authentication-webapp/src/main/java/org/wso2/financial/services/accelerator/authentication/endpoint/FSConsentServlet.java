@@ -453,7 +453,7 @@ public class FSConsentServlet extends HttpServlet {
         request.setAttribute(Constants.APP, dataSet.getString(Constants.APPLICATION));
 
         // Pass custom values to JSP
-        List<String> accountsData = addAccList(dataSet);
+        List<Map<String, String>> accountsData = addAccList(dataSet);
         String applicationName = dataSet.getString(Constants.APPLICATION);
         request.setAttribute("basicConsentData", applicationName + " application is requesting your consent to access the following data: ");
         request.setAttribute("user", user);
@@ -472,14 +472,19 @@ public class FSConsentServlet extends HttpServlet {
         dispatcher.forward(request, response);
     }
 
-    private static List<String> addAccList(JSONObject dataSet) {
-        List<String> accountData = new ArrayList<>();
-        // add accounts list
+    private static List<Map<String, String>> addAccList(JSONObject dataSet) {
+        List<Map<String, String>> accountData = new ArrayList<>();
+        // add accounts list with both scope (accountId) and displayName
         JSONArray accountsList = dataSet.getJSONObject("consumerData").getJSONArray("accounts");
         for (int accountIndex = 0; accountIndex < accountsList.length(); accountIndex++) {
             JSONObject object = accountsList.getJSONObject(accountIndex);
-            String displayName = object.getString("displayName");
-            accountData.add(displayName);
+            String accountId = object.getString("accountId"); // The scope/permission code
+            String displayName = object.getString("displayName"); // The user-friendly name
+            
+            Map<String, String> account = new HashMap<>();
+            account.put("value", accountId); // This will be the checkbox value
+            account.put("label", displayName); // This will be displayed in UI
+            accountData.add(account);
         }
         return accountData;
     }
