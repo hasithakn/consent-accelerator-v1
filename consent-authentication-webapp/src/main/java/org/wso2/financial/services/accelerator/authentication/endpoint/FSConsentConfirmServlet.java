@@ -122,9 +122,11 @@ public class FSConsentConfirmServlet extends HttpServlet {
         String consentExpiry = request.getParameter("consentExpiry");
         log.info("Consent expiry selected: {} days", consentExpiry);
 
-        String[] selectedAccounts = request.getParameterValues("accounts");
-        JSONObject selectedAccountsJson = new JSONObject();
-        selectedAccountsJson.put("selected_accounts", selectedAccounts);
+        // Capture approved purposes (selected permission scopes)
+        String[] approvedPurposes = request.getParameterValues("accounts");
+        JSONObject approvedPurposesJson = new JSONObject();
+        approvedPurposesJson.put("approved_purposes", approvedPurposes);
+        log.info("Approved purposes: {}", Arrays.toString(approvedPurposes));
 
         String user = cachedDataSet.getString("user");
         String consentId = cachedDataSet.getString("consent_id");
@@ -168,7 +170,7 @@ public class FSConsentConfirmServlet extends HttpServlet {
                 auth_resource.put("userId", user);
                 auth_resource.put("type", "authorisation");
                 auth_resource.put("status", "authorised");
-                auth_resource.put("resource", selectedAccountsJson);
+                auth_resource.put("resource", approvedPurposesJson);
                 auth_resources.put(auth_resource);
 
                 putPayload.put("authorizations", auth_resources);
