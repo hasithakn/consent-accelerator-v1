@@ -117,29 +117,6 @@ public class ConsentEnforcementUtils {
         additionalParams.forEach(validationRequest::put);
         return validationRequest;
     }
-
-    /**
-     * Method to generate JWT with the given payload.
-     *
-     * @param payload JSON payload as a string to be included in the JWT claims
-     * @return Serialized JWT as a string
-     * @throws ParseException
-     * @throws JOSEException
-     */
-    public static String generateJWT(String payload) throws ParseException, JOSEException {
-
-        RSASSASigner signer = new RSASSASigner((PrivateKey) KeyStoreUtils.getSigningKey());
-        JWTClaimsSet claimsSet = JWTClaimsSet.parse(payload);
-
-        JWSHeader header = new JWSHeader.Builder(JWSAlgorithm.RS512)
-                .type(JOSEObjectType.JWT)
-                .build();
-
-        SignedJWT signedJWT = new SignedJWT(header, claimsSet);
-        signedJWT.sign(signer);
-        return signedJWT.serialize();
-    }
-
     /**
      * Method to check whether the given string is a valid JWT token.
      *

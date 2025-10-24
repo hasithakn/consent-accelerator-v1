@@ -42,7 +42,7 @@
 <header name="Accept" scope="transport" value="application/json"/>
 
 <!-- Set the 'messageType' property required by the axis2 layer, this property controls how Synapse serializes the request body -->
-<property name="messageType" scope="axis2" value="application/jwt"/>
+<property name="messageType" scope="axis2" value="application/json"/>
 
 <!-- Disabling default behaviour of appending the sub request path to URL -->
 <property name="REST_URL_POSTFIX" scope="axis2" action="remove"/>
@@ -50,13 +50,14 @@
 <!-- Call the consent validation endpoint in blocking mode -->
 <call blocking="true">
     <endpoint>
-        <http method="POST" uri-template="{{consentServiceBaseUrl}}/api/fs/consent/validate/validate"/>
+        <http method="POST" uri-template="{{consentServiceBaseUrl}}/api/v1/validate"/>
     </endpoint>
 </call>
 
 <header name="Authorization" scope="transport" expression="$ctx:originalAuthorizationHeader"/>
 <header name="Content-Type" scope="transport" expression="$ctx:originalContentTypeHeader"/>
 <header name="Accept" scope="transport" expression="$ctx:originalAcceptHeader"/>
+<header name="org-id" scope="transport" value="org1"/>
 
 <!-- Extract required attributes from the response JSON into properties -->
 <property name="isValid" expression="json-eval($.isValid)" scope="default" type="STRING"/>

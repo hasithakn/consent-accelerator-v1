@@ -26,23 +26,6 @@ public class ConsentEnforcementConstants {
     public static final String AUTH_HEADER = "Authorization";
     public static final String BEARER_TAG = "Bearer ";
     public static final String BASIC_TAG = "Basic ";
-    public static final String COLON = ":";
-    public static final String CONTENT_TYPE_TAG = "Content-Type";
-    public static final String JWT_CONTENT_TYPE = "application/jwt";
-    public static final String API_KEY_VALIDATOR_USERNAME = "APIKeyValidator.Username";
-    public static final String API_KEY_VALIDATOR_PASSWORD = "APIKeyValidator.Password";
-    public static final String INFO_HEADER_TAG = "Account-Request-Information";
-    public static final String IS_VALID = "isValid";
-    public static final String MODIFIED_PAYLOAD = "modifiedPayload";
-    public static final String CONSENT_INFO = "consentInformation";
-    public static final String CONSENT_VALIDATE_ENDPOINT = "/api/fs/consent/validate/validate";
-
-    // Configs
-    public static final String KEYSTORE_LOCATION_TAG = "Security.InternalKeyStore.Location";
-    public static final String KEYSTORE_PASSWORD_TAG = "Security.InternalKeyStore.Password";
-    public static final String SIGNING_ALIAS_TAG = "Security.InternalKeyStore.KeyAlias";
-    public static final String SIGNING_KEY_PASSWORD = "Security.InternalKeyStore.KeyPassword";
-
     // Additional param keys
     public static final String ELECTED_RESOURCE_TAG = "electedResource";
     public static final String CONSENT_ID_TAG = "consentId";

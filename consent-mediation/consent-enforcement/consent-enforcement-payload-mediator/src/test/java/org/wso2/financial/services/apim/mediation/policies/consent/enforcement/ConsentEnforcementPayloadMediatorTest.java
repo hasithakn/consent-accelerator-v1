@@ -81,9 +81,6 @@ public class ConsentEnforcementPayloadMediatorTest {
         consentEnforcementUtilsMockedStatic.when(() -> ConsentEnforcementUtils
                 .createValidationRequestPayload(Mockito.any(), Mockito.any(), Mockito.any()))
                 .thenReturn(new JSONObject());
-        consentEnforcementUtilsMockedStatic.when(() -> ConsentEnforcementUtils
-                .generateJWT(Mockito.any()))
-                .thenReturn("enforcementJwtPayload");
         jsonUtilMockedStatic.when(() -> JsonUtil
                         .jsonPayloadToString(Mockito.any()))
                 .thenReturn("jsonRequestPayload");
@@ -119,9 +116,6 @@ public class ConsentEnforcementPayloadMediatorTest {
         consentEnforcementUtilsMockedStatic.when(() -> ConsentEnforcementUtils
                         .createValidationRequestPayload(Mockito.any(), Mockito.any(), Mockito.any()))
                 .thenReturn(new JSONObject());
-        consentEnforcementUtilsMockedStatic.when(() -> ConsentEnforcementUtils
-                        .generateJWT(Mockito.any()))
-                .thenThrow(ParseException.class);
 
         mediator.setConsentIdClaimName("consentId");
         mediator.mediate(axis2Ctx);

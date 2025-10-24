@@ -90,17 +90,12 @@ public class ConsentEnforcementPayloadMediator extends AbstractMediator {
             validationRequest = ConsentEnforcementUtils
                     .createValidationRequestPayload(jsonPayload, headers, additionalParams);
 
-            String enforcementJWTPayload = ConsentEnforcementUtils.generateJWT(validationRequest.toString());
-            messageContext.setProperty("consentEnforcementJwtPayload", enforcementJWTPayload);
+            String enforcementPayload = validationRequest.toString();
+            messageContext.setProperty("consentEnforcementJwtPayload", enforcementPayload);
         } catch (JSONException e) {
             String errorDescription = "Invalid JSON payload";
             log.error(errorDescription, e);
             setErrorResponseProperties(messageContext, "Bad Request", errorDescription, "400");
-            throw new SynapseException(errorDescription);
-        } catch (JOSEException | ParseException e) {
-            String errorDescription = "Error while generating JWT payload for consent validation";
-            log.error(errorDescription, e);
-            setErrorResponseProperties(messageContext, "Internal Server Error", errorDescription, "500");
             throw new SynapseException(errorDescription);
         }
 
