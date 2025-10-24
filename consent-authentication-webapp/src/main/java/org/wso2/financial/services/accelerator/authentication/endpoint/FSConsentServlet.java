@@ -500,7 +500,7 @@ public class FSConsentServlet extends HttpServlet {
     HttpResponse getConsentDataWithKey(String sessionDataKeyConsent, ServletContext servletContext) throws IOException {
 
         // Construct Asgardeo API URL
-        String asgardeoBaseURL = "https://localhost:9443/api/identity/auth/v1.1/data/OauthConsentKey/";
+        String asgardeoBaseURL = "https://localhost:9446/api/identity/auth/v1.1/data/OauthConsentKey/";
         String retrieveUrl = asgardeoBaseURL + sessionDataKeyConsent;
 
         CloseableHttpClient client = HttpClientBuilder.create().build();

@@ -15,6 +15,7 @@
     <modules>
         <module>consent-accelerator-utils</module>
         <module>consent-authentication-webapp</module>
+        <module>consent-mediation</module>
     </modules>
 
     <repositories>

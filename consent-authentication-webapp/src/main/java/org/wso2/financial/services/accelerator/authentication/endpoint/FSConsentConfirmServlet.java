@@ -391,7 +391,7 @@ public class FSConsentConfirmServlet extends HttpServlet {
         try (CloseableHttpClient client = HttpClientBuilder.create().build()) {
 
             BasicCookieStore cookieStore = new BasicCookieStore();
-            String cookieDomain = new URI("https://localhost:9443/oauth2/authorize").getHost();
+            String cookieDomain = new URI("https://localhost:9446/oauth2/authorize").getHost();
             for (Map.Entry<String, String> cookieValue : cookies.entrySet()) {
                 BasicClientCookie cookie = new BasicClientCookie(cookieValue.getKey(), cookieValue.getValue());
                 cookie.setDomain(cookieDomain);
@@ -399,7 +399,7 @@ public class FSConsentConfirmServlet extends HttpServlet {
                 cookie.setSecure(true);
                 cookieStore.addCookie(cookie);
             }
-            HttpPost authorizeRequest = new HttpPost("https://localhost:9443/oauth2/authorize");
+            HttpPost authorizeRequest = new HttpPost("https://localhost:9446/oauth2/authorize");
             List<NameValuePair> params = new ArrayList<>();
             params.add(new BasicNameValuePair("hasApprovedAlways", "false"));
             params.add(new BasicNameValuePair("sessionDataKeyConsent",
