@@ -26,17 +26,7 @@
 <!-- Extract the API resource path being accessed -->
 <property name="api.resource.path" expression="get-property('api.ut.resource')" scope="default" type="STRING"/>
 
-<!-- Log original request details -->
-<log level="custom">
-    <property name="Message" value="Original request captured"/>
-    <property name="OriginalBody" expression="$ctx:originalRequestJsonBody"/>
-    <property name="OriginalAuthHeader" expression="$ctx:originalAuthorizationHeader"/>
-    <property name="OriginalContentType" expression="$ctx:originalContentTypeHeader"/>
-    <property name="OriginalAccept" expression="$ctx:originalAcceptHeader"/>
-    <property name="APIResourcePath" expression="$ctx:api.resource.path"/>
-</log>
-
-<!-- This class mediator is responsible for generating the payload for the consent validation service and is stored in the property 'consentEnforcementJwtPayload' -->
+<!-- This class mediator is responsible for generating the payload for the consent validation service and is stored in the property 'consentEnforcementPayload' -->
 <class name="org.wso2.financial.services.apim.mediation.policies.consent.enforcement.ConsentEnforcementPayloadMediator">
     <property name="consentIdClaimName" value="{{consentIdClaimName}}"/>
 </class>
@@ -44,14 +34,14 @@
 <!-- Log the JWT payload generated for consent validation -->
 <log level="custom">
     <property name="Message" value="JWT payload generated for consent validation"/>
-    <property name="JWTPayload" expression="$ctx:consentEnforcementJwtPayload"/>
+    <property name="JWTPayload" expression="$ctx:consentEnforcementPayload"/>
 </log>
 
 <!-- Set the request payload -->
 <payloadFactory media-type="text">
     <format>$1</format>
     <args>
-        <arg expression="$ctx:consentEnforcementJwtPayload" />
+        <arg expression="$ctx:consentEnforcementPayload" />
     </args>
 </payloadFactory>
 
@@ -68,16 +58,6 @@
 <!-- Disabling default behaviour of appending the sub request path to URL -->
 <property name="REST_URL_POSTFIX" scope="axis2" action="remove"/>
 
-<!-- Log the request before calling the consent validation service -->
-<log level="custom">
-    <property name="Message" value="Calling consent validation service"/>
-    <property name="Endpoint" expression="fn:concat('{{consentServiceBaseUrl}}', '/api/v1/validate')"/>
-    <property name="Method" value="POST"/>
-    <property name="RequestPayload" expression="$body"/>
-    <property name="Authorization" value="Basic {{consentServiceBasicAuthCredentials}}"/>
-    <property name="Content-Type" value="application/jwt"/>
-</log>
-
 <!-- Call the consent validation endpoint in blocking mode -->
 <call blocking="true">
     <endpoint>
@@ -87,13 +67,6 @@
 
 <!-- Set message type back to JSON for processing response -->
 <property name="messageType" scope="axis2" value="application/json"/>
-
-<!-- Log the response from the consent validation service -->
-<log level="custom">
-    <property name="Message" value="Received response from consent validation service"/>
-    <property name="ResponsePayload" expression="$body"/>
-    <property name="ResponseStatus" expression="$axis2:HTTP_SC"/>
-</log>
 
 <!-- Remove headers used for consent service call -->
 <header name="Authorization" scope="transport" action="remove"/>
@@ -124,21 +97,9 @@
 <property name="modifiedPayload" expression="json-eval($.modifiedPayload)" scope="default" type="STRING"/>
 <property name="consentInformation" expression="json-eval($.consentInformation)" scope="default" type="STRING"/>
 
-<!-- Log extracted properties from consent validation response -->
-<log level="custom">
-    <property name="Message" value="Extracted consent validation response properties"/>
-    <property name="isValid" expression="$ctx:isValid"/>
-    <property name="modifiedPayload" expression="$ctx:modifiedPayload"/>
-    <property name="consentInformation" expression="$ctx:consentInformation"/>
-</log>
-
 <!-- Check if 'isValid' is null -->
 <filter xpath="not($ctx:isValid)">
     <then>
-        <log level="custom">
-            <property name="Message" value="ERROR: isValid is null"/>
-        </log>
-        <!-- Setting required properties for generating the error response and sending the flow through the fault sequence -->
         <property name="ERROR_CODE" value="Internal Server Error"/>
         <property name="ERROR_TITLE" value="Consent Enforcement Error"/>
         <property name="ERROR_DESCRIPTION" value="Unexpected error occurred at the consent validation service"/>
@@ -150,52 +111,27 @@
 <!-- Check if 'isValid' is true -->
 <filter source="$ctx:isValid" regex="true">
     <then>
-        <log level="custom">
-            <property name="Message" value="SUCCESS: Consent is valid, proceeding with request"/>
-            <property name="isValid" expression="$ctx:isValid"/>
-        </log>
-
-        <!-- Extract approved_purposes from consentInformation -->
         <property name="approvedPurposes" expression="json-eval($.consentInformation.authResources[0].resource)" scope="default" type="STRING"/>
-
-        <!-- Use the API resource path captured earlier -->
         <property name="electedResource" expression="$ctx:api.resource.path" scope="default" type="STRING"/>
-
-        <log level="custom">
-            <property name="Message" value="Checking resource permissions"/>
-            <property name="approvedPurposes" expression="$ctx:approvedPurposes"/>
-            <property name="electedResource" expression="$ctx:electedResource"/>
-        </log>
-
-        <!-- Check if the requested resource is in the approved purposes -->
-        <!-- The approvedPurposes is a JSON string like: {"approved_purposes":["utility:read","license:read","tax:read"]} -->
-        <!-- The electedResource is like: /utilities which maps to utility:read -->
-
-        <!-- Parse the JSON and check if resource permission exists -->
         <script language="js">
             <![CDATA[
                 var approvedPurposesStr = mc.getProperty("approvedPurposes");
                 var electedResource = mc.getProperty("electedResource");
                 var hasPermission = false;
-
                 try {
                     if (approvedPurposesStr && electedResource) {
                         var approvedData = JSON.parse(approvedPurposesStr);
                         var purposes = approvedData.approved_purposes || [];
-
                         // Map resource path to permission scope
                         var resourceMap = {
                             "/utilities": "utility:read",
                             "/licenses": "license:read",
                             "/taxes": "tax:read"
                         };
-
                         var requiredPermission = resourceMap[electedResource];
-
                         if (requiredPermission && purposes.indexOf(requiredPermission) !== -1) {
                             hasPermission = true;
                         }
-
                         mc.setProperty("hasResourcePermission", hasPermission.toString());
                         mc.setProperty("requiredPermission", requiredPermission || "unknown");
                     } else {
@@ -209,13 +145,6 @@
             ]]>
         </script>
 
-        <log level="custom">
-            <property name="Message" value="Resource permission check result"/>
-            <property name="hasResourcePermission" expression="$ctx:hasResourcePermission"/>
-            <property name="requiredPermission" expression="$ctx:requiredPermission"/>
-        </log>
-
-        <!-- Check if resource permission exists -->
         <filter source="$ctx:hasResourcePermission" regex="true">
             <then>
                 <log level="custom">
@@ -237,90 +166,16 @@
             </else>
         </filter>
 
-        <!-- Consent is valid -->
-        <filter xpath="boolean($ctx:modifiedPayload)">
-            <then>
-                <log level="custom">
-                    <property name="Message" value="Using modifiedPayload as request body"/>
-                    <property name="modifiedPayload" expression="$ctx:modifiedPayload"/>
-                </log>
-                <!-- Set 'modifiedPayload' as new request body if available -->
-                <payloadFactory media-type="json">
-                    <format>$1</format>
-                    <args>
-                        <arg expression="$ctx:modifiedPayload"/>
-                    </args>
-                </payloadFactory>
-            </then>
-            <else>
-                <!-- 'modifiedPayload' is null -->
-                <log level="custom">
-                    <property name="Message" value="modifiedPayload is null, using original request body"/>
-                    <property name="HTTP_METHOD" expression="$ctx:api.ut.HTTP_METHOD"/>
-                    <property name="originalRequestBody" expression="$ctx:originalRequestBody"/>
-                    <property name="originalRequestJsonBody" expression="$ctx:originalRequestJsonBody"/>
-                </log>
-                <!-- Set 'originalRequestBody' as the request body when 'modifiedPayload' is not available -->
-                <filter source="$ctx:api.ut.HTTP_METHOD" regex="^(GET|DELETE)$">
-                    <then>
-                        <log level="custom">
-                            <property name="Message" value="HTTP method is GET or DELETE, using enrich mediator"/>
-                        </log>
-                        <enrich>
-                            <source clone="false" type="property" property="originalRequestBody"/>
-                            <target action="replace" type="body"/>
-                        </enrich>
-                    </then>
-                    <else>
-                        <log level="custom">
-                            <property name="Message" value="HTTP method is POST/PUT/PATCH, using payloadFactory"/>
-                        </log>
-                        <payloadFactory media-type="json">
-                            <format>$1</format>
-                            <args>
-                               <arg evaluator="xml" expression="$ctx:originalRequestJsonBody"/>
-                            </args>
-                        </payloadFactory>
-                    </else>
-                </filter>
-            </else>
-        </filter>
-
-        <log level="custom">
-            <property name="Message" value="Request body restored, setting consent information header"/>
-            <property name="FinalRequestBody" expression="$body"/>
-        </log>
-
         <filter xpath="boolean($ctx:consentInformation)">
             <then>
-                <log level="custom">
-                    <property name="Message" value="Setting Account-Request-Information header"/>
-                    <property name="consentInformation" expression="$ctx:consentInformation"/>
-                </log>
                 <!-- Set 'consentInformation' as an HTTP header if available -->
                 <header name="Account-Request-Information" scope="transport" expression="$ctx:consentInformation"/>
             </then>
             <else>
-                <log level="custom">
-                    <property name="Message" value="consentInformation is null, skipping header"/>
-                </log>
-                <!-- 'consentInformation' is null -->
             </else>
         </filter>
-
-        <log level="custom">
-            <property name="Message" value="Consent validation complete - allowing request to proceed to backend"/>
-            <property name="FinalBody" expression="$body"/>
-        </log>
     </then>
-
     <else>
-        <log level="custom">
-            <property name="Message" value="ERROR: Consent is NOT valid"/>
-            <property name="isValid" expression="$ctx:isValid"/>
-        </log>
-        <!-- Consent is not valid -->
-        <!-- Setting required properties for generating the error response and sending the flow through the fault sequence -->
         <property name="ERROR_CODE" expression="json-eval($.errorCode)"/>
         <property name="ERROR_TITLE" value="Consent Enforcement Error"/>
         <property name="ERROR_DESCRIPTION" expression="json-eval($.errorMessage)"/>

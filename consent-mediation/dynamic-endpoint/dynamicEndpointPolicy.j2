@@ -23,5 +23,5 @@
 <!-- Disabling default behaviour of appending the sub request path to URL -->
 <property name="REST_URL_POSTFIX" scope="axis2" action="remove"/>
 
-<header name="To" expression="fn:concat('{{bankBackendBaseUrl}}/', $ctx:uri.var.subRequestPath)"/>
+<header name="To" expression="fn:concat('http://localhost:3002/', $ctx:uri.var.subRequestPath)"/>
 
