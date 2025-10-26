@@ -18,7 +18,6 @@
 
 package org.wso2.financial.services.accelerator.authentication.endpoint;
 
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.http.HttpResponse;
@@ -59,30 +58,12 @@ public class FSConsentServlet extends HttpServlet {
     private static final long serialVersionUID = 6106269076132678046L;
     private static Logger log = LoggerFactory.getLogger(FSConsentServlet.class);
 
-    @SuppressFBWarnings({"REQUESTDISPATCHER_FILE_DISCLOSURE", "TRUST_BOUNDARY_VIOLATION"})
-    // Suppressed content - obAuthServlet.getJSPPath()
-    // Suppression reason - False Positive : JSP path is hard coded and does not
-    // accept any user inputs, therefore it
-    // can be trusted
-    // Suppressed content - Encode.forJava(sessionDataKey)
-    // Suppression reason - False positive : sessionDataKey is encoded for Java
-    // which escapes untrusted characters
-    // Suppressed warning count - 2
     @Override
     public void doGet(HttpServletRequest originalRequest, HttpServletResponse response)
-            throws IOException, ServletException {
+            throws IOException {
 
         String sessionDataKey = originalRequest.getParameter(Constants.SESSION_DATA_KEY_CONSENT);
-
-        // Validating session data key format
-        if (!isValidSessionDataKey(sessionDataKey)) {
-            log.error("Invalid session data key");
-            originalRequest.getSession().invalidate();
-            response.sendRedirect("retry.do?status=Error&statusMsg=Invalid session data key");
-            return;
-        }
-
-        HttpResponse consentDataResponse = getConsentDataWithKey(sessionDataKey, getServletContext());
+        HttpResponse consentDataResponse = getConsentDataWithKey(sessionDataKey);
         log.debug("HTTP response for consent retrieval: " + consentDataResponse.toString());
 
         // Handle redirect response
@@ -95,20 +76,9 @@ public class FSConsentServlet extends HttpServlet {
             // Parse session data from response
             JSONObject sessionData = parseSessionData(consentDataResponse);
             String user = sessionData.getString("loggedInUser");
-
-            // Determine flow based on request parameter presence
-            String requestObject = extractRequestParameter(sessionData);
             JSONObject dataSet;
-
-            if (requestObject != null && !requestObject.isEmpty()) {
-                // Flow 1: Handle JWT request parameter flow
-                log.info("Processing JWT request parameter flow");
-                dataSet = handleJwtRequestFlow(sessionData, requestObject, consentDataResponse.getStatusLine().getStatusCode(), response);
-            } else {
-                // Flow 2: Handle standard consent flow (without JWT request)
-                log.info("Processing standard consent flow");
-                dataSet = handleStandardConsentFlow(sessionData, consentDataResponse.getStatusLine().getStatusCode(), response);
-            }
+            dataSet = handleStandardConsentFlow(sessionData, consentDataResponse.getStatusLine().getStatusCode(),
+                    response);
 
             // Check for errors
             if (dataSet == null || dataSet.has(Constants.IS_ERROR)) {
@@ -122,22 +92,7 @@ public class FSConsentServlet extends HttpServlet {
         } catch (Exception e) {
             log.error("Exception occurred while processing consent", e);
             handleError(originalRequest, response,
-                new JSONObject().put(Constants.IS_ERROR, "Exception occurred: " + e.getMessage()));
-        }
-    }
-
-    /**
-     * Validates the session data key format.
-     *
-     * @param sessionDataKey the session data key to validate
-     * @return true if valid, false otherwise
-     */
-    private boolean isValidSessionDataKey(String sessionDataKey) {
-        try {
-            UUID.fromString(sessionDataKey);
-            return true;
-        } catch (IllegalArgumentException e) {
-            return false;
+                    new JSONObject().put(Constants.IS_ERROR, "Exception occurred: " + e.getMessage()));
         }
     }
 
@@ -149,7 +104,7 @@ public class FSConsentServlet extends HttpServlet {
      */
     private boolean shouldRedirect(HttpResponse response) {
         return response.getStatusLine().getStatusCode() == HttpURLConnection.HTTP_MOVED_TEMP &&
-               response.getLastHeader(Constants.LOCATION) != null;
+                response.getLastHeader(Constants.LOCATION) != null;
     }
 
     /**
@@ -166,114 +121,21 @@ public class FSConsentServlet extends HttpServlet {
     }
 
     /**
-     * Extracts the request parameter from spQueryParams.
-     *
-     * @param sessionData the session data JSON object
-     * @return the request parameter value, or null if not found
-     */
-    private String extractRequestParameter(JSONObject sessionData) {
-        if (!sessionData.has("spQueryParams")) {
-            return null;
-        }
-
-        String spQueryParams = sessionData.getString("spQueryParams");
-        String[] params = spQueryParams.split("&");
-
-        for (String param : params) {
-            if (param.startsWith("request=")) {
-                try {
-                    String requestObject = param.substring("request=".length());
-                    // URL decode the request object
-                    requestObject = java.net.URLDecoder.decode(requestObject, StandardCharsets.UTF_8.toString());
-                    log.debug("Extracted request object: " + requestObject);
-                    return requestObject;
-                } catch (Exception e) {
-                    log.error("Error extracting request parameter", e);
-                    return null;
-                }
-            }
-        }
-        return null;
-    }
-
-    /**
-     * Handles the JWT request parameter flow.
-     *
-     * @param sessionData the session data
-     * @param requestObject the JWT request object
-     * @param statusCode the HTTP status code
-     * @param response the HTTP response
-     * @return the processed consent dataset
-     * @throws IOException if processing fails
-     * @throws URISyntaxException if URI construction fails
-     */
-    private JSONObject handleJwtRequestFlow(JSONObject sessionData, String requestObject,
-                                           int statusCode, HttpServletResponse response)
-            throws IOException, URISyntaxException {
-
-        // Extract consent ID from JWT
-        String consentId = extractConsentIdFromJwt(requestObject);
-
-        if (consentId == null || consentId.isEmpty()) {
-            log.warn("No consent ID found in JWT request object");
-            return createConsentDataset(sessionData, statusCode);
-        }
-
-        log.info("Extracted consent_id from request object: " + consentId);
-
-        // Fetch and process consent details
-        JSONObject consentDetails = fetchConsentDetails(consentId, getServletContext());
-
-        if (consentDetails == null) {
-            log.error("Failed to fetch consent details for consent_id: " + consentId);
-            return new JSONObject().put(Constants.IS_ERROR, "Failed to fetch consent details");
-        }
-
-        // Validate consent status
-        if (!consentDetails.getString("status").equalsIgnoreCase("CREATED")) {
-            response.sendRedirect("retry.do?status=Error&statusMsg=invalid_consent_status");
-            return null;
-        }
-
-        // Transform and merge consent data
-        JSONObject transformedConsentData = transformConsentDetails(consentDetails, sessionData);
-        if (transformedConsentData != null) {
-            transformedConsentData.put("consent_id", consentId);
-            mergeConsentData(sessionData, transformedConsentData);
-            log.debug("Transformed consent data: " + transformedConsentData.toString());
-        }
-
-        // Check for error redirects
-        String errorResponse = AuthenticationUtils.getErrorResponseForRedirectURL(sessionData);
-        if (sessionData.has(Constants.REDIRECT_URI) && StringUtils.isNotEmpty(errorResponse)) {
-            URI errorURI = new URI(sessionData.get(Constants.REDIRECT_URI).toString().concat(errorResponse));
-            response.sendRedirect(errorURI.toString());
-            return null;
-        }
-
-        return createConsentDataset(transformedConsentData, statusCode);
-    }
-
-    /**
      * Handles the standard consent flow (without JWT request parameter).
      *
      * @param sessionData the session data
-     * @param statusCode the HTTP status code
-     * @param response the HTTP response
+     * @param statusCode  the HTTP status code
+     * @param response    the HTTP response
      * @return the processed consent dataset
-     * @throws IOException if processing fails
+     * @throws IOException        if processing fails
      * @throws URISyntaxException if URI construction fails
      */
     private JSONObject handleStandardConsentFlow(JSONObject sessionData, int statusCode,
                                                  HttpServletResponse response)
             throws IOException, URISyntaxException {
 
-        // Debug: Log available fields in sessionData
-        log.debug("Standard flow - Available session data keys: " + sessionData.keys().toString());
-
         // Extract purpose strings from scopes (use optString to avoid exception if missing)
         String scopesString = sessionData.optString("scopes", "");
-
         if (scopesString.isEmpty()) {
             log.warn("No scopes found in session data, attempting to retrieve from spQueryParams");
             // Try to extract scopes from spQueryParams if available
@@ -290,14 +152,11 @@ public class FSConsentServlet extends HttpServlet {
                 }
             }
         }
-
         String[] purposeStrings = extractPurposesFromScopes(scopesString);
-
         if (purposeStrings == null || purposeStrings.length == 0) {
             log.warn("No purpose strings found in session data, creating default consent dataset");
-            return createConsentDataset(sessionData, statusCode);
+            return createConsentDataset(sessionData, sessionData, statusCode);
         }
-
         log.info("Extracted purpose strings from session data: " + Arrays.toString(purposeStrings));
 
         // Create consent instead of fetching
@@ -307,28 +166,17 @@ public class FSConsentServlet extends HttpServlet {
             log.error("Failed to create consent");
             return new JSONObject().put(Constants.IS_ERROR, "Failed to create consent");
         }
-
         // Extract the created consent ID
-        String consentId = consentDetails.optString("consentId", null);
+        String consentId = consentDetails.optString("id", null);
         if (consentId == null || consentId.isEmpty()) {
             log.error("Consent created but no consent ID returned");
             return new JSONObject().put(Constants.IS_ERROR, "Failed to retrieve consent ID");
         }
-
         log.info("Successfully created consent with ID: " + consentId);
-
         // Validate consent status
         if (!consentDetails.getString("status").equalsIgnoreCase("CREATED")) {
             response.sendRedirect("retry.do?status=Error&statusMsg=invalid_consent_status");
             return null;
-        }
-
-        // Transform and merge consent data
-        JSONObject transformedConsentData = transformConsentDetails(consentDetails, sessionData);
-        if (transformedConsentData != null) {
-            transformedConsentData.put("consent_id", consentId);
-            mergeConsentData(sessionData, transformedConsentData);
-            log.debug("Transformed consent data: " + transformedConsentData.toString());
         }
 
         // Check for error redirects
@@ -339,81 +187,19 @@ public class FSConsentServlet extends HttpServlet {
             return null;
         }
 
-        return createConsentDataset(transformedConsentData, statusCode);
-    }
-
-    /**
-     * Extracts consent ID from JWT request object.
-     *
-     * @param requestObject the JWT request object
-     * @return the consent ID, or null if not found
-     */
-    private String extractConsentIdFromJwt(String requestObject) {
-        try {
-            // JWT has three parts separated by dots: header.payload.signature
-            String[] jwtParts = requestObject.split("\\.");
-            if (jwtParts.length < 2) {
-                log.warn("Invalid JWT format");
-                return null;
-            }
-
-            // Decode the payload (second part)
-            String payload = new String(Base64.getUrlDecoder().decode(jwtParts[1]), StandardCharsets.UTF_8);
-            log.debug("Decoded JWT payload: " + payload);
-
-            JSONObject jwtPayload = new JSONObject(payload);
-
-            // Extract consent_id from claims.id_token.openbanking_intent_id.value
-            if (jwtPayload.has("claims")) {
-                JSONObject claims = jwtPayload.getJSONObject("claims");
-                if (claims.has("id_token")) {
-                    JSONObject idToken = claims.getJSONObject("id_token");
-                    if (idToken.has("openbanking_intent_id")) {
-                        JSONObject intentId = idToken.getJSONObject("openbanking_intent_id");
-                        if (intentId.has("value")) {
-                            return intentId.getString("value");
-                        }
-                    }
-                }
-            }
-        } catch (Exception e) {
-            log.error("Error decoding JWT request object", e);
-        }
-        return null;
-    }
-
-    /**
-     * Merges transformed consent data into session data.
-     *
-     * @param sessionData the original session data
-     * @param transformedConsentData the transformed consent data to merge
-     */
-    private void mergeConsentData(JSONObject sessionData, JSONObject transformedConsentData) {
-        if (transformedConsentData == null) {
-            return;
-        }
-
-        if (transformedConsentData.has("consentData")) {
-            sessionData.put("consentData", transformedConsentData.get("consentData"));
-        }
-        if (transformedConsentData.has("consumerData")) {
-            sessionData.put("consumerData", transformedConsentData.get("consumerData"));
-        }
-        if (transformedConsentData.has("type")) {
-            sessionData.put("type", transformedConsentData.get("type"));
-        }
+        return createConsentDataset(consentDetails, sessionData, statusCode);
     }
 
     /**
      * Handles error scenarios and redirects appropriately.
      *
-     * @param request the HTTP request
+     * @param request  the HTTP request
      * @param response the HTTP response
-     * @param dataSet the dataset containing error information
+     * @param dataSet  the dataset containing error information
      * @throws IOException if redirect fails
      */
     private void handleError(HttpServletRequest request, HttpServletResponse response,
-                            JSONObject dataSet) throws IOException {
+                             JSONObject dataSet) throws IOException {
         String errorMessage = "Unknown error";
 
         if (dataSet != null && dataSet.has(Constants.IS_ERROR)) {
@@ -427,16 +213,16 @@ public class FSConsentServlet extends HttpServlet {
     /**
      * Prepares request attributes and forwards to JSP.
      *
-     * @param request the HTTP request
-     * @param response the HTTP response
+     * @param request        the HTTP request
+     * @param response       the HTTP response
      * @param sessionDataKey the session data key
-     * @param dataSet the consent dataset
-     * @param user the logged-in user
+     * @param dataSet        the consent dataset
+     * @param user           the logged-in user
      * @throws ServletException if forwarding fails
-     * @throws IOException if forwarding fails
+     * @throws IOException      if forwarding fails
      */
     private void prepareAndForwardToJSP(HttpServletRequest request, HttpServletResponse response,
-                                       String sessionDataKey, JSONObject dataSet, String user)
+                                        String sessionDataKey, JSONObject dataSet, String user)
             throws ServletException, IOException {
 
         // Set variables to session
@@ -455,7 +241,8 @@ public class FSConsentServlet extends HttpServlet {
         // Pass custom values to JSP
         List<Map<String, String>> accountsData = addAccList(dataSet);
         String applicationName = dataSet.getString(Constants.APPLICATION);
-        request.setAttribute("basicConsentData", applicationName + " application is requesting your consent to access the following data: ");
+        request.setAttribute("basicConsentData", applicationName +
+                " application is requesting your consent to access the following data: ");
         request.setAttribute("user", user);
         request.setAttribute("consumerAccounts", accountsData);
 
@@ -472,19 +259,28 @@ public class FSConsentServlet extends HttpServlet {
         dispatcher.forward(request, response);
     }
 
-    private static List<Map<String, String>> addAccList(JSONObject dataSet) {
+    private List<Map<String, String>> addAccList(JSONObject dataSet) {
         List<Map<String, String>> accountData = new ArrayList<>();
-        // add accounts list with both scope (accountId) and displayName
-        JSONArray accountsList = dataSet.getJSONObject("consumerData").getJSONArray("accounts");
-        for (int accountIndex = 0; accountIndex < accountsList.length(); accountIndex++) {
-            JSONObject object = accountsList.getJSONObject(accountIndex);
-            String accountId = object.getString("accountId"); // The scope/permission code
-            String displayName = object.getString("displayName"); // The user-friendly name
-            
-            Map<String, String> account = new HashMap<>();
-            account.put("value", accountId); // This will be the checkbox value
-            account.put("label", displayName); // This will be displayed in UI
-            accountData.add(account);
+
+        // Extract permissions and map to accounts
+        if (dataSet.has("requestPayload")) {
+            JSONObject requestPayload = dataSet.getJSONObject("requestPayload");
+            if (requestPayload.has("Data")) {
+                JSONObject requestData = requestPayload.getJSONObject("Data");
+
+                if (requestData.has("Permissions")) {
+                    org.json.JSONArray permissions = requestData.getJSONArray("Permissions");
+                    for (int i = 0; i < permissions.length(); i++) {
+                        String permission = permissions.getString(i);
+                        if (!permission.equalsIgnoreCase("gov")) {
+                            Map<String, String> account = new HashMap<>();
+                            account.put("value", permission); // This will be the checkbox value
+                            account.put("label", getPermissionDisplayName(permission)); // This will be displayed in UI
+                            accountData.add(account);
+                        }
+                    }
+                }
+            }
         }
         return accountData;
     }
@@ -493,23 +289,18 @@ public class FSConsentServlet extends HttpServlet {
      * Retrieve consent data with the session data key from Asgardeo API.
      *
      * @param sessionDataKeyConsent session data key
-     * @param servletContext        servlet context
      * @return HTTP response
      * @throws IOException if an error occurs while retrieving consent data
      */
-    HttpResponse getConsentDataWithKey(String sessionDataKeyConsent, ServletContext servletContext) throws IOException {
+    HttpResponse getConsentDataWithKey(String sessionDataKeyConsent) throws IOException {
 
-        // Construct Asgardeo API URL
-        String asgardeoBaseURL = "https://localhost:9446/api/identity/auth/v1.1/data/OauthConsentKey/";
-        String retrieveUrl = asgardeoBaseURL + sessionDataKeyConsent;
-
+        // Construct IS API URL
+        String isBaseURL = "https://localhost:9446/api/identity/auth/v1.1/data/OauthConsentKey/";
+        String retrieveUrl = isBaseURL + sessionDataKeyConsent;
         CloseableHttpClient client = HttpClientBuilder.create().build();
         HttpGet dataRequest = new HttpGet(retrieveUrl);
-
-        // Add required headers
         dataRequest.addHeader("accept", Constants.JSON);
         dataRequest.addHeader(Constants.AUTHORIZATION, "Basic YWRtaW46YWRtaW4=");
-
         return client.execute(dataRequest);
 
     }
@@ -518,11 +309,11 @@ public class FSConsentServlet extends HttpServlet {
      * Create consent data from the response of the consent retrieval.
      *
      * @param consentResponse consent response from retrieval
+     * @param sessionData
      * @param statusCode      status code of the response
      * @return consent data JSON object
-     * @throws IOException if an error occurs while creating the consent data
      */
-    JSONObject createConsentDataset(JSONObject consentResponse, int statusCode) throws IOException {
+    JSONObject createConsentDataset(JSONObject consentResponse, JSONObject sessionData, int statusCode) {
 
         JSONObject errorObject = new JSONObject();
         if (statusCode != HttpURLConnection.HTTP_OK) {
@@ -535,50 +326,10 @@ public class FSConsentServlet extends HttpServlet {
             }
             return errorObject;
         } else {
+            for (Object key : sessionData.keySet()) {
+                consentResponse.put((String) key, sessionData.get((String) key));
+            }
             return consentResponse;
-        }
-    }
-
-    /**
-     * Fetch consent details from external API.
-     *
-     * @param consentId      the consent ID to fetch details for
-     * @param servletContext servlet context
-     * @return consent details JSON object
-     * @throws IOException if an error occurs while fetching consent details
-     */
-    JSONObject fetchConsentDetails(String consentId, ServletContext servletContext) throws IOException {
-
-        // Construct the consent API URL
-        String consentApiBaseURL = servletContext.getInitParameter("ConsentAPIBaseURL");
-        if (consentApiBaseURL == null || consentApiBaseURL.isEmpty()) {
-            // Use default URL if not configured
-            consentApiBaseURL = "http://localhost:3000/api/v1/consents/";
-        }
-        String consentApiUrl = consentApiBaseURL + consentId;
-
-        CloseableHttpClient client = HttpClientBuilder.create().build();
-        HttpGet consentRequest = new HttpGet(consentApiUrl);
-
-        // Add required headers
-        String orgId = servletContext.getInitParameter("ConsentAPI.OrgId");
-        String clientId = servletContext.getInitParameter("ConsentAPI.ClientId");
-
-        consentRequest.addHeader("org-id", orgId != null ? orgId : "org1");
-        consentRequest.addHeader("client-id", clientId != null ? clientId : "string");
-        consentRequest.addHeader("Accept", Constants.JSON);
-
-        HttpResponse consentResponse = client.execute(consentRequest);
-
-        // Parse and return the response
-        if (consentResponse.getStatusLine().getStatusCode() == HttpURLConnection.HTTP_OK) {
-            String responseBody = IOUtils.toString(consentResponse.getEntity().getContent(),
-                    String.valueOf(StandardCharsets.UTF_8));
-            return new JSONObject(responseBody);
-        } else {
-            log.error("Failed to fetch consent details. Status code: " +
-                    consentResponse.getStatusLine().getStatusCode());
-            return null;
         }
     }
 
@@ -594,51 +345,34 @@ public class FSConsentServlet extends HttpServlet {
     JSONObject createConsent(String[] purposeStrings, JSONObject sessionData, ServletContext servletContext)
             throws IOException {
 
-        // Construct the consent API URL (without trailing slash to avoid 307 redirect)
-        String consentApiBaseURL = servletContext.getInitParameter("ConsentAPIBaseURL");
-        if (consentApiBaseURL == null || consentApiBaseURL.isEmpty()) {
-            // Use default URL if not configured
-            consentApiBaseURL = "http://localhost:3000/api/v1/consents";
-        }
-        // Remove trailing slash if present
+        String consentApiBaseURL =  "http://localhost:3000/api/v1/consents";
         consentApiBaseURL = consentApiBaseURL.replaceAll("/$", "");
 
-        // Create HTTP client that follows redirects
         CloseableHttpClient client = HttpClientBuilder.create()
-                .setRedirectStrategy(new org.apache.http.impl.client.LaxRedirectStrategy())
-                .build();
+                .setRedirectStrategy(new org.apache.http.impl.client.LaxRedirectStrategy()).build();
         org.apache.http.client.methods.HttpPost consentRequest =
-            new org.apache.http.client.methods.HttpPost(consentApiBaseURL);
+                new org.apache.http.client.methods.HttpPost(consentApiBaseURL);
 
         // Add required headers
-        String orgId = servletContext.getInitParameter("ConsentAPI.OrgId");
-        String clientId = sessionData.optString("application",
-                            servletContext.getInitParameter("ConsentAPI.ClientId"));
-        String userId = sessionData.optString("loggedInUser", "user");
-
-        consentRequest.addHeader("org-id", orgId != null ? orgId : "org1");
-        consentRequest.addHeader("client-id", clientId != null ? clientId : "string");
+        String orgId = "org1";
+        String clientId = "clientId1";
+        consentRequest.addHeader("org-id", orgId);
+        consentRequest.addHeader("client-id", clientId);
         consentRequest.addHeader("Content-Type", "application/json");
         consentRequest.addHeader("Accept", "application/json");
-
-        // Build request payload
         JSONObject requestPayload = new JSONObject();
         JSONObject data = new JSONObject();
-
         // Add permissions from purpose strings
         JSONArray permissions = new JSONArray();
         for (String purpose : purposeStrings) {
             permissions.put(purpose);
         }
         data.put("Permissions", permissions);
-
         requestPayload.put("Data", data);
-
         // Create the full consent creation request
         JSONObject consentCreationRequest = new JSONObject();
         consentCreationRequest.put("type", "gov");
         consentCreationRequest.put("clientId", clientId);
-        consentCreationRequest.put("userId", userId);
         consentCreationRequest.put("requestPayload", requestPayload);
         consentCreationRequest.put("status", "CREATED");
 
@@ -646,78 +380,32 @@ public class FSConsentServlet extends HttpServlet {
         org.apache.http.entity.StringEntity entity = new org.apache.http.entity.StringEntity(
                 consentCreationRequest.toString(), StandardCharsets.UTF_8);
         consentRequest.setEntity(entity);
-
-        log.info("Creating consent at URL: " + consentApiBaseURL);
-        log.info("Request payload: " + consentCreationRequest.toString());
-
         HttpResponse consentResponse = client.execute(consentRequest);
-
-        // Parse and return the response
         int statusCode = consentResponse.getStatusLine().getStatusCode();
 
-        // Read response body
         String responseBody = "";
         if (consentResponse.getEntity() != null) {
             responseBody = IOUtils.toString(consentResponse.getEntity().getContent(),
                     String.valueOf(StandardCharsets.UTF_8));
         }
-
-        log.info("Consent creation response - Status: " + statusCode +
-                 ", Reason: " + consentResponse.getStatusLine().getReasonPhrase() +
-                 ", Body length: " + responseBody.length());
-
         if (statusCode == HttpURLConnection.HTTP_OK || statusCode == HttpURLConnection.HTTP_CREATED) {
             if (responseBody.isEmpty()) {
                 log.error("Consent creation returned success but empty response body");
                 return null;
             }
-
             try {
                 JSONObject createdConsent = new JSONObject(responseBody);
                 log.info("Successfully created consent. Response keys: " + createdConsent.keys().toString());
                 log.info("Full response: " + responseBody);
-
-                // Normalize the consent ID field name
-                // API might return 'id', '_id', or 'consentId'
-                if (!createdConsent.has("consentId")) {
-                    if (createdConsent.has("_id")) {
-                        createdConsent.put("consentId", createdConsent.getString("_id"));
-                        log.info("Normalized '_id' to 'consentId': " + createdConsent.getString("_id"));
-                    } else if (createdConsent.has("id")) {
-                        createdConsent.put("consentId", createdConsent.getString("id"));
-                        log.info("Normalized 'id' to 'consentId': " + createdConsent.getString("id"));
-                    } else {
-                        log.warn("Response does not contain any consent ID field (_id, id, or consentId)");
-                    }
-                }
-
                 return createdConsent;
             } catch (JSONException e) {
                 log.error("Failed to parse consent response as JSON: " + responseBody, e);
                 return null;
             }
-        } else if (statusCode == HttpURLConnection.HTTP_MOVED_TEMP || statusCode == 307) {
-            // Handle redirect - log the location header
-            String location = consentResponse.getFirstHeader("Location") != null ?
-                             consentResponse.getFirstHeader("Location").getValue() : "no location header";
-            log.warn("Consent creation returned redirect (307). Location: " + location);
-            log.warn("Response body: " + responseBody);
-
-            // If there's a response body with consent info, try to use it
-            if (!responseBody.isEmpty()) {
-                try {
-                    JSONObject redirectResponse = new JSONObject(responseBody);
-                    log.info("Redirect response contains data: " + redirectResponse.keys().toString());
-                    return redirectResponse;
-                } catch (JSONException e) {
-                    log.error("Redirect response is not valid JSON: " + responseBody);
-                }
-            }
-            return null;
         } else {
             log.error("Failed to create consent. Status code: " + statusCode +
-                     ", Reason: " + consentResponse.getStatusLine().getReasonPhrase() +
-                     ", Response: " + responseBody);
+                    ", Reason: " + consentResponse.getStatusLine().getReasonPhrase() +
+                    ", Response: " + responseBody);
             return null;
         }
     }
@@ -833,41 +521,8 @@ public class FSConsentServlet extends HttpServlet {
             case "tax:read":
                 return "Tax Records Information";
             default:
-                // For unknown permissions, convert to title case
-                return formatPermissionName(permission);
+                return permission;
         }
-    }
-
-    /**
-     * Format permission name to be more readable.
-     * Converts "some:permission" to "Some Permission"
-     *
-     * @param permission the permission code
-     * @return formatted permission name
-     */
-    private String formatPermissionName(String permission) {
-        if (permission == null || permission.trim().isEmpty()) {
-            return permission;
-        }
-
-        // Remove common suffixes like :read, :write, :delete
-        String cleanedPermission = permission.replaceAll(":(read|write|delete|update|create)", "");
-
-        // Replace common separators with spaces
-        cleanedPermission = cleanedPermission.replaceAll("[_:\\-.]", " ");
-
-        // Capitalize first letter of each word
-        String[] words = cleanedPermission.split("\\s+");
-        StringBuilder result = new StringBuilder();
-        for (String word : words) {
-            if (word.length() > 0) {
-                result.append(Character.toUpperCase(word.charAt(0)))
-                      .append(word.substring(1).toLowerCase())
-                      .append(" ");
-            }
-        }
-
-        return result.toString().trim();
     }
 
     /**
@@ -893,12 +548,12 @@ public class FSConsentServlet extends HttpServlet {
             scope = scope.trim();
             // Skip empty, standard OAuth scopes, and consent_id scopes
             if (!scope.isEmpty() &&
-                !scope.equalsIgnoreCase("openid") &&
-                !scope.equalsIgnoreCase("profile") &&
-                !scope.equalsIgnoreCase("email") &&
-                !scope.equalsIgnoreCase("address") &&
-                !scope.equalsIgnoreCase("phone") &&
-                !scope.startsWith("consent_id_")) {
+                    !scope.equalsIgnoreCase("openid") &&
+                    !scope.equalsIgnoreCase("profile") &&
+                    !scope.equalsIgnoreCase("email") &&
+                    !scope.equalsIgnoreCase("address") &&
+                    !scope.equalsIgnoreCase("phone") &&
+                    !scope.startsWith("consent_id_")) {
                 purposes.add(scope);
             }
         }

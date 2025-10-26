@@ -56,13 +56,5 @@ public class Constants {
     public static final String STATE_PARAMETER = "&state=";
     public static final String DESCRIPTION = "description";
     public static final String AUTHORIZATION = "Authorization";
-    public static final String BASIC = "Basic ";
-    public static final String RETRIEVAL_BASE_URL = "retrievalBaseURL";
     public static final String SLASH = "/";
-    public static final String CONFIG_FILE_NAME = "configurations.properties";
-    public static final String LOCATION_OF_CREDENTIALS = "ConsentAPICredentials.IsConfiguredInWebapp";
-    public static final String USERNAME_IN_WEBAPP_CONFIGS = "ConsentAPICredentials.Username";
-    public static final String PASSWORD_IN_WEBAPP_CONFIGS = "ConsentAPICredentials.Password";
-    public static final String IS_DEFAULT = "is_default";
-    public static final String CONSENT_MGT = "consentmgt";
 }
