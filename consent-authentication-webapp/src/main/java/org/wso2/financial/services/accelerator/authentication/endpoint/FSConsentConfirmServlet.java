@@ -103,9 +103,17 @@ public class FSConsentConfirmServlet extends HttpServlet {
                 auth_resource.put("resource", approvedPurposesJson);
                 auth_resources.put(auth_resource);
                 putPayload.put("authorizations", auth_resources);
+
+                String commonAuthId = null;
+                for (Cookie cookie : cookies) {
+                    if ("commonAuthId".equals(cookie.getName())) {
+                        commonAuthId = cookie.getValue();
+                        log.info("Found commonAuthId cookie: {}", commonAuthId);
+                        break;
+                    }
+                }
                 JSONObject attributes = new JSONObject();
-                //todo
-                attributes.put("commonAuthId", session.getId());
+                attributes.put("commonAuthId", commonAuthId);
                 putPayload.put("attributes", attributes);
 
                 // Calculate and add expiration timestamp based on consentExpiry

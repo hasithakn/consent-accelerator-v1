@@ -18,19 +18,26 @@
 
 package com.wso2.consent.accelerator;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.http.HttpResponse;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClientBuilder;
+import org.json.JSONArray;
+import org.json.JSONObject;
 import org.wso2.carbon.identity.oauth2.IdentityOAuth2Exception;
 import org.wso2.carbon.identity.oauth2.authz.OAuthAuthzReqMessageContext;
 import org.wso2.carbon.identity.oauth2.authz.handlers.HybridResponseTypeHandler;
 import org.wso2.carbon.identity.oauth2.dto.OAuth2AuthorizeRespDTO;
 
 import javax.servlet.http.Cookie;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
 
 /**
@@ -39,14 +46,9 @@ import java.util.Arrays;
 public class ConsentHybridResponseTypeHandler extends HybridResponseTypeHandler {
 
     private static final Log log = LogFactory.getLog(ConsentHybridResponseTypeHandler.class);
+    private static final String COMMON_AUTH_ID = "commonAuthId";
 
-    /**
-     * Custom implementation of issue method.
-     *
-     * @param oauthAuthzMsgCtx OAuthAuthzReqMessageContext
-     * @return OAuth2AuthorizeRespDTO
-     * @throws IdentityOAuth2Exception If an error occurred while issuing the code.
-     */
+
     @Override
     public OAuth2AuthorizeRespDTO issue(OAuthAuthzReqMessageContext oauthAuthzMsgCtx)
             throws IdentityOAuth2Exception {
@@ -55,22 +57,12 @@ public class ConsentHybridResponseTypeHandler extends HybridResponseTypeHandler 
             log.debug("Custom HybridResponseTypeHandler invoked for client: "
                     + oauthAuthzMsgCtx.getAuthorizationReqDTO().getConsumerKey());
         }
-
-
         // Perform FS default behaviour
         String[] updatedApprovedScopes = updateApprovedScopes(oauthAuthzMsgCtx);
-
-
         if (updatedApprovedScopes != null) {
             oauthAuthzMsgCtx.setApprovedScope(updatedApprovedScopes);
         }
-        // Add your custom logic here before calling super.issue()
-
-        // Call the parent implementation
         OAuth2AuthorizeRespDTO respDTO = super.issue(oauthAuthzMsgCtx);
-
-        // Add your custom logic here after calling super.issue()
-
         return respDTO;
     }
 
@@ -81,21 +73,8 @@ public class ConsentHybridResponseTypeHandler extends HybridResponseTypeHandler 
             String[] scopes = oAuthAuthzReqMessageContext.getApprovedScope();
             if (scopes != null && !Arrays.asList(scopes).contains("api_store")) {
 
-                // Extract consent ID from essential claims
-                String consentId = extractConsentIdFromEssentialClaims(oAuthAuthzReqMessageContext);
 
-                // If consent ID is empty, try to get it from cookies
-                if (StringUtils.isEmpty(consentId)) {
-                    log.debug("Consent ID not found in essential claims, trying to retrieve from cookies");
-                    consentId = extractConsentIdFromCookies(oAuthAuthzReqMessageContext);
-                    
-                    if (StringUtils.isEmpty(consentId)) {
-                        log.warn("Consent ID not found in both essential claims and cookies");
-                        return scopes;
-                    } else {
-                        log.debug("Consent ID retrieved from cookies: " + consentId.replaceAll("[\r\n]", ""));
-                    }
-                }
+                String consentId = extractConsentIdFromCommonAuthId(oAuthAuthzReqMessageContext);
 
                 String consentIdClaim = "consent_id_";
                 String consentScope = consentIdClaim + consentId;
@@ -116,102 +95,103 @@ public class ConsentHybridResponseTypeHandler extends HybridResponseTypeHandler 
         return oAuthAuthzReqMessageContext.getApprovedScope();
     }
 
-    /**
-     * Extract consent ID from essential claims in the authorization request.
-     * Expected format: {"id_token":{"openbanking_intent_id":{"value":"CONSENT-xxx","essential":true}}}
-     *
-     * @param oAuthAuthzReqMessageContext OAuth authorization request message context
-     * @return Consent ID or empty string if not found
-     */
-    private static String extractConsentIdFromEssentialClaims(OAuthAuthzReqMessageContext oAuthAuthzReqMessageContext) {
 
-        try {
-            String essentialClaims = oAuthAuthzReqMessageContext.getAuthorizationReqDTO().getEssentialClaims();
+    private static String getCommonAuthId(OAuthAuthzReqMessageContext oAuthAuthzReqMessageContext) {
 
-            if (StringUtils.isEmpty(essentialClaims)) {
-                if (log.isDebugEnabled()) {
-                    log.debug("Essential claims not found in the authorization request");
-                }
-                return "";
+        Cookie[] cookies = oAuthAuthzReqMessageContext.getAuthorizationReqDTO().getCookie();
+        String commonAuthId = StringUtils.EMPTY;
+        ArrayList<Cookie> cookieList = new ArrayList<>(Arrays.asList(cookies));
+        for (Cookie cookie : cookieList) {
+            if (COMMON_AUTH_ID.equals(cookie.getName())) {
+                commonAuthId = cookie.getValue();
+                break;
             }
-
-            if (log.isDebugEnabled()) {
-                log.debug("Essential claims: " + essentialClaims.replaceAll("[\r\n]", ""));
-            }
-
-            // Parse the JSON to extract consent ID
-            ObjectMapper objectMapper = new ObjectMapper();
-            JsonNode rootNode = objectMapper.readTree(essentialClaims);
-
-            // Navigate through the JSON structure: id_token -> openbanking_intent_id -> value
-            JsonNode idTokenNode = rootNode.get("id_token");
-            if (idTokenNode != null) {
-                JsonNode intentIdNode = idTokenNode.get("openbanking_intent_id");
-                if (intentIdNode != null) {
-                    JsonNode valueNode = intentIdNode.get("value");
-                    if (valueNode != null) {
-                        String consentId = valueNode.asText();
-                        if (log.isDebugEnabled()) {
-                            log.debug("Extracted consent ID: " + consentId.replaceAll("[\r\n]", ""));
-                        }
-                        return consentId;
-                    }
-                }
-            }
-
-            log.warn("Consent ID not found in essential claims structure");
-            return "";
-
-        } catch (JsonProcessingException e) {
-            log.error("Error parsing essential claims JSON: " + e.getMessage().replaceAll("[\r\n]", ""), e);
-            return "";
-        } catch (Exception e) {
-            log.error("Error extracting consent ID from essential claims: " + e.getMessage().replaceAll("[\r\n]", ""), e);
-            return "";
         }
+        return commonAuthId;
     }
 
     /**
-     * Extract consent ID from cookies in the authorization request.
+     * Extract consent ID from commonAuthId by querying the consent API.
      *
-     * @param oAuthAuthzReqMessageContext OAuth authorization request message context
-     * @return Consent ID from cookies or empty string if not found
+     * @param oAuthAuthzReqMessageContext OAuth authorization context
+     * @return consent ID if found, empty string otherwise
      */
-    private static String extractConsentIdFromCookies(OAuthAuthzReqMessageContext oAuthAuthzReqMessageContext) {
-        
-        try {
-            // Get the HTTP servlet request from the context
-            javax.servlet.http.HttpServletRequest request = 
-                oAuthAuthzReqMessageContext.getAuthorizationReqDTO().getHttpServletRequestWrapper();
-            
-            if (request == null) {
-                if (log.isDebugEnabled()) {
-                    log.debug("HTTP servlet request not available in OAuth context");
-                }
-                return "";
-            }
+    private static String extractConsentIdFromCommonAuthId(OAuthAuthzReqMessageContext oAuthAuthzReqMessageContext) {
 
-            Cookie[] cookies = request.getCookies();
-            if (cookies != null) {
-                for (Cookie cookie : cookies) {
-                    if ("consentId".equals(cookie.getName())) {
-                        String consentId = cookie.getValue();
-                        if (log.isDebugEnabled()) {
-                            log.debug("Found consent ID in cookie: " + consentId.replaceAll("[\r\n]", ""));
-                        }
-                        return consentId;
-                    }
-                }
-            }
+        String commonAuthId = getCommonAuthId(oAuthAuthzReqMessageContext);
+
+        if (StringUtils.isEmpty(commonAuthId)) {
+            log.warn("commonAuthId is empty, cannot extract consent ID");
+            return StringUtils.EMPTY;
+        }
+
+        try {
+            // Build the API URL with query parameters
+            String consentApiBaseURL = "http://localhost:3000/api/v1/consents/attributes";
+            String queryParams = String.format("?key=commonAuthId&value=%s",
+                    URLEncoder.encode(commonAuthId, "UTF-8"));
+            String apiUrl = consentApiBaseURL + queryParams;
+
+            // Create HTTP client
+            CloseableHttpClient client = HttpClientBuilder.create().build();
+            HttpGet getRequest = new HttpGet(apiUrl);
+
+            // Add required headers
+            getRequest.addHeader("org-id", "org1");
+            getRequest.addHeader("client-id", "clientId1");
+            getRequest.addHeader("Accept", "application/json");
 
             if (log.isDebugEnabled()) {
-                log.debug("Consent ID cookie not found");
+                log.debug("Fetching consent ID from API: " + apiUrl);
             }
-            return "";
+
+            // Execute request
+            HttpResponse response = client.execute(getRequest);
+            int statusCode = response.getStatusLine().getStatusCode();
+
+            if (statusCode == 200) {
+                // Read response body
+                String responseBody = IOUtils.toString(
+                        response.getEntity().getContent(),
+                        StandardCharsets.UTF_8);
+
+                if (log.isDebugEnabled()) {
+                    log.debug("API response: " + responseBody);
+                }
+
+                // Parse JSON response - expecting format: {"consentIds": ["CONSENT-xxx"], "count": 1}
+                JSONObject responseJson = new JSONObject(responseBody);
+
+                if (responseJson.has("consentIds")) {
+                    JSONArray consentIds = responseJson.getJSONArray("consentIds");
+                    
+                    if (consentIds.length() > 0) {
+                        String consentId = consentIds.getString(0);
+                        
+                        if (consentId != null && !consentId.isEmpty()) {
+                            if (log.isDebugEnabled()) {
+                                log.debug("Successfully extracted consent ID: " + consentId +
+                                        " for commonAuthId: " + commonAuthId);
+                            }
+                            return consentId;
+                        }
+                    } else {
+                        log.warn("No consent IDs found in response for commonAuthId: " + commonAuthId);
+                    }
+                } else {
+                    log.warn("Response does not contain 'consentIds' field");
+                }
+            } else {
+                log.error("Failed to fetch consent by commonAuthId. Status: " + statusCode +
+                        ", Reason: " + response.getStatusLine().getReasonPhrase());
+            }
+
+            client.close();
 
         } catch (Exception e) {
-            log.error("Error extracting consent ID from cookies: " + e.getMessage().replaceAll("[\r\n]", ""), e);
-            return "";
+            log.error("Error extracting consent ID from commonAuthId: " + commonAuthId, e);
         }
+
+        return StringUtils.EMPTY;
     }
 }
