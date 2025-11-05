@@ -133,11 +133,27 @@
 <!-- Check if 'isValid' is null -->
 <filter xpath="not($ctx:isValid)">
     <then>
-        <property name="ERROR_CODE" value="Internal Server Error"/>
-        <property name="ERROR_TITLE" value="Consent Enforcement Error"/>
-        <property name="ERROR_DESCRIPTION" value="Unexpected error occurred at the consent validation service"/>
-        <property name="CUSTOM_HTTP_SC" value="500"/>
-        <sequence key="fault"/>
+        <log level="custom">
+            <property name="Message" value="ERROR: isValid is null - unexpected response from validation service"/>
+        </log>
+        
+        <!-- Build error response -->
+        <payloadFactory media-type="json">
+            <format>
+                {
+                    "code": "Internal Server Error",
+                    "type": "Consent Enforcement Error",
+                    "message": "Unexpected error occurred at the consent validation service",
+                    "description": "The validation service did not return a valid response."
+                }
+            </format>
+        </payloadFactory>
+        
+        <!-- Set HTTP status code -->
+        <property name="HTTP_SC" value="500" scope="axis2"/>
+        
+        <!-- Stop further processing and send response -->
+        <respond/>
     </then>
 </filter>
 
@@ -231,12 +247,28 @@
                     <property name="requiredPermission" expression="$ctx:requiredPermission"/>
                     <property name="approvedPurposesNames" expression="$ctx:approvedPurposesNames"/>
                 </log>
-                <!-- Resource not in approved purposes - return 403 Forbidden -->
-                <property name="ERROR_CODE" value="Forbidden"/>
-                <property name="ERROR_TITLE" value="Insufficient Permissions"/>
-                <property name="ERROR_DESCRIPTION" value="The consent does not include permission to access this resource"/>
-                <property name="CUSTOM_HTTP_SC" value="403"/>
-                <sequence key="fault"/>
+                
+                <!-- Build error response for insufficient permissions -->
+                <payloadFactory media-type="json">
+                    <format>
+                        {
+                            "code": "Forbidden",
+                            "type": "Insufficient Permissions",
+                            "message": "The consent does not include permission to access this resource",
+                            "description": "Required permission: $1. Approved purposes: $2"
+                        }
+                    </format>
+                    <args>
+                        <arg expression="get-property('requiredPermission')" evaluator="xml"/>
+                        <arg expression="get-property('approvedPurposesNames')" evaluator="xml"/>
+                    </args>
+                </payloadFactory>
+                
+                <!-- Set HTTP status code -->
+                <property name="HTTP_SC" value="403" scope="axis2"/>
+                
+                <!-- Stop further processing and send response -->
+                <respond/>
             </else>
         </filter>
 
@@ -250,10 +282,38 @@
         </filter>
     </then>
     <else>
-        <property name="ERROR_CODE" expression="json-eval($.errorCode)"/>
-        <property name="ERROR_TITLE" value="Consent Enforcement Error"/>
-        <property name="ERROR_DESCRIPTION" expression="json-eval($.errorMessage)"/>
-        <property name="CUSTOM_HTTP_SC" expression="json-eval($.httpCode)"/>
-        <sequence key="fault"/>
+        <!-- Log when isValid is false -->
+        <log level="custom">
+            <property name="Message" value="Consent validation failed - isValid is false"/>
+            <property name="errorCode" expression="json-eval($.errorCode)"/>
+            <property name="errorMessage" expression="json-eval($.errorMessage)"/>
+        </log>
+        
+        <!-- Extract error details from response if available -->
+        <property name="errorCodeFromResponse" expression="json-eval($.errorCode)" scope="default" type="STRING"/>
+        <property name="errorMessageFromResponse" expression="json-eval($.errorMessage)" scope="default" type="STRING"/>
+        <property name="httpCodeFromResponse" expression="json-eval($.httpCode)" scope="default" type="STRING"/>
+        
+        <!-- Build custom error response -->
+        <payloadFactory media-type="json">
+            <format>
+                {
+                    "code": "$1",
+                    "type": "Consent Validation Failed",
+                    "message": "$2",
+                    "description": "The consent could not be validated. It may be invalid, expired, revoked, or insufficient for this operation."
+                }
+            </format>
+            <args>
+                <arg expression="get-property('errorCodeFromResponse')" evaluator="xml"/>
+                <arg expression="get-property('errorMessageFromResponse')" evaluator="xml"/>
+            </args>
+        </payloadFactory>
+        
+        <!-- Set HTTP status code -->
+        <property name="HTTP_SC" value="401" scope="axis2"/>
+        
+        <!-- Stop further processing and send response -->
+        <respond/>
     </else>
 </filter>
