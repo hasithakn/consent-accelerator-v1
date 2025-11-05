@@ -35,6 +35,7 @@ import org.apache.http.message.BasicNameValuePair;
 import org.apache.http.protocol.BasicHttpContext;
 import org.apache.http.protocol.HttpContext;
 import org.json.JSONArray;
+import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -76,34 +77,17 @@ public class FSConsentConfirmServlet extends HttpServlet {
         approvedPurposesJson.put("approved_purposes", approvedPurposes);
         log.info("Approved purposes: {}", Arrays.toString(approvedPurposes));
         String user = cachedDataSet.getString("user");
-        String consentId = cachedDataSet.getString("id");
         boolean approval = request.getParameter("consent") != null &&
                 request.getParameter("consent").equals("true");
 
-        // Fetch fresh consent details using consent ID if available
-        JSONObject freshConsentDetails = null;
-        if (consentId != null && !consentId.isEmpty()) {
-            try {
-                freshConsentDetails = fetchConsentDetails(consentId, getServletContext());
-            } catch (IOException e) {
-                log.error("Error fetching consent details for consent_id: {}", consentId, e);
-            }
-        }
+        String consentId = null;
 
-        // Update the consent status to authorised if user approved
-        if (approval && freshConsentDetails != null && consentId != null) {
-            try {
-                JSONObject putPayload = new JSONObject();
-                JSONArray auth_resources = new JSONArray();
-                JSONObject auth_resource = new JSONObject();
-                putPayload.put("status", "AUTHORIZED");
-                auth_resource.put("userId", user);
-                auth_resource.put("type", "authorisation");
-                auth_resource.put("status", "authorised");
-                auth_resource.put("resource", approvedPurposesJson);
-                auth_resources.put(auth_resource);
-                putPayload.put("authorizations", auth_resources);
+        // Only create consent if user approved
+        if (approval && cachedDataSet.has("validPurposes")) {
+            log.info("User approved - creating consent with all data");
 
+            try {
+                // Get commonAuthId from cookies
                 String commonAuthId = null;
                 for (Cookie cookie : cookies) {
                     if ("commonAuthId".equals(cookie.getName())) {
@@ -112,57 +96,75 @@ public class FSConsentConfirmServlet extends HttpServlet {
                         break;
                     }
                 }
-                JSONObject attributes = new JSONObject();
-                attributes.put("commonAuthId", commonAuthId);
-                putPayload.put("attributes", attributes);
 
-                // Calculate and add expiration timestamp based on consentExpiry
+                // Calculate validityTime and dataAccessValidityDuration
+                Long validityTime = null;
                 if (consentExpiry != null && !consentExpiry.isEmpty()) {
                     try {
                         int expiryDays = Integer.parseInt(consentExpiry);
-                        // Calculate future timestamp in seconds (Unix epoch time)
-                        long currentTimestamp = System.currentTimeMillis() / 1000; // Current time in seconds
-                        long expirySeconds = (long) expiryDays * 24 * 60 * 60; // Convert days to seconds
-                        long validityTimestamp = currentTimestamp + expirySeconds;
-                        putPayload.put("validityTime", validityTimestamp);
+                        long currentTimestamp = System.currentTimeMillis() ;
+                        long expirySeconds = (long) expiryDays * 24 * 60 * 60 * 1000;
+                        validityTime = currentTimestamp + expirySeconds;
                         log.info("Set consent validity time to timestamp: {} (expires in {} days)",
-                                validityTimestamp, expiryDays);
+                                validityTime, expiryDays);
                     } catch (NumberFormatException e) {
                         log.warn("Invalid consentExpiry value: {}", consentExpiry);
                     }
                 }
 
-                // Add data access validity duration (historical data access period in seconds)
+                Integer dataAccessValidityDuration = null;
                 if (dataAccessDuration != null && !dataAccessDuration.isEmpty()) {
-                    // Convert days to seconds for dataAccessValidityDuration
                     if (!"all".equals(dataAccessDuration)) {
                         try {
                             int durationDays = Integer.parseInt(dataAccessDuration);
-                            // Convert days to seconds: days * 24 hours * 60 minutes * 60 seconds
-                            int durationSeconds = durationDays * 24 * 60 * 60;
-                            putPayload.put("dataAccessValidityDuration", durationSeconds);
+                            dataAccessValidityDuration = durationDays * 24 * 60 * 60;
                             log.info("Set data access validity duration to: {} seconds ({} days)",
-                                    durationSeconds, durationDays);
+                                    dataAccessValidityDuration, durationDays);
                         } catch (NumberFormatException e) {
                             log.warn("Invalid dataAccessDuration value: {}", dataAccessDuration);
                         }
                     } else {
-                        int maxDurationSeconds = 365 * 10 * 24 * 60 * 60; // 10 years
-                        putPayload.put("dataAccessValidityDuration", maxDurationSeconds);
+                        dataAccessValidityDuration = 365 * 10 * 24 * 60 * 60; // 10 years
                         log.info("Set data access validity duration to maximum: {} seconds (all data)",
-                                maxDurationSeconds);
+                                dataAccessValidityDuration);
                     }
                 }
-                boolean updateSuccess = updateConsent(consentId, putPayload, getServletContext());
-                if (updateSuccess) {
-                    log.info("Successfully updated consent with ID: {}", consentId);
-                } else {
-                    log.error("Failed to update consent with ID: {}", consentId);
-                }
 
+                // Create consent with all data including authorization
+                JSONObject createdConsent = createConsentWithAuthorization(
+                        approvedPurposes,
+                        user,
+                        commonAuthId,
+                        validityTime,
+                        dataAccessValidityDuration,
+                        approvedPurposesJson,
+                        cachedDataSet,
+                        getServletContext()
+                );
+
+                if (createdConsent != null) {
+                    consentId = createdConsent.optString("id", null);
+                    if (consentId == null || consentId.isEmpty()) {
+                        consentId = createdConsent.optString("_id",
+                                createdConsent.optString("consentId", null));
+                    }
+                    log.info("Successfully created and authorized consent with ID: {}", consentId);
+                } else {
+                    log.error("Failed to create consent");
+                    response.sendRedirect("retry.do?status=Error&statusMsg=consent_creation_failed");
+                    return;
+                }
             } catch (Exception e) {
-                log.error("Error updating consent status for consent_id: {}", consentId, e);
+                log.error("Error creating consent", e);
+                response.sendRedirect("retry.do?status=Error&statusMsg=consent_creation_error");
+                return;
             }
+        } else if (!approval) {
+            log.info("User denied consent");
+        } else {
+            log.warn("No validPurposes found in cache - cannot create consent");
+            response.sendRedirect("retry.do?status=Error&statusMsg=no_valid_purposes");
+            return;
         }
 
         URI authorizeRequestRedirect = null;
@@ -266,6 +268,134 @@ public class FSConsentConfirmServlet extends HttpServlet {
             log.error("Error updating consent for consent_id: {}", consentId, e);
             return false;
         }
+    }
+
+    /**
+     * Create a new consent with authorization in a single API call.
+     *
+     * @param approvedPurposes             the purposes approved by user
+     * @param userId                       the user ID
+     * @param commonAuthId                 the commonAuthId from cookie
+     * @param validityTime                 consent expiry timestamp (can be null)
+     * @param dataAccessValidityDuration   data access duration in seconds (can be null)
+     * @param approvedPurposesJson         approved purposes JSON object
+     * @param sessionData                  session data
+     * @param servletContext               servlet context
+     * @return created consent JSON object
+     * @throws IOException if an error occurs
+     */
+    private JSONObject createConsentWithAuthorization(String[] approvedPurposes, String userId,
+                                                      String commonAuthId, Long validityTime,
+                                                      Integer dataAccessValidityDuration,
+                                                      JSONObject approvedPurposesJson,
+                                                      JSONObject sessionData, ServletContext servletContext)
+            throws IOException {
+
+        String consentApiBaseURL = "http://localhost:3000/api/v1/consents";
+        consentApiBaseURL = consentApiBaseURL.replaceAll("/$", "");
+
+        // Create HTTP client
+        CloseableHttpClient client = HttpClientBuilder.create()
+                .setRedirectStrategy(new org.apache.http.impl.client.LaxRedirectStrategy())
+                .build();
+        HttpPost consentRequest = new HttpPost(consentApiBaseURL);
+
+        // Add required headers
+        String orgId = "org1";
+        String clientId = sessionData.optString("application", "clientId1");
+
+        consentRequest.addHeader("org-id", orgId);
+        consentRequest.addHeader("tpp-client-id", clientId);
+        consentRequest.addHeader("Content-Type", "application/json");
+        consentRequest.addHeader("Accept", "application/json");
+
+        // Create the full consent creation request with authorization
+        JSONObject consentCreationRequest = new JSONObject();
+        consentCreationRequest.put("type", "accounts");
+        consentCreationRequest.put("status", "ACTIVE");
+
+        // Add validityTime (default to 0 if not provided)
+        consentCreationRequest.put("validityTime", validityTime != null ? validityTime : 0);
+
+        consentCreationRequest.put("recurringIndicator", false);
+
+        // Add dataAccessValidityDuration (default to 86400 seconds = 1 day if not provided)
+        consentCreationRequest.put("dataAccessValidityDuration",
+                dataAccessValidityDuration != null ? dataAccessValidityDuration : 86400);
+
+        consentCreationRequest.put("frequency", 0);
+
+        JSONArray validPurposesArray = sessionData.getJSONArray("validPurposes");
+        // Build consentPurpose array
+        JSONArray consentPurposeArray = new JSONArray();
+        for (int i = 0; i < validPurposesArray.length(); i++) {
+            JSONObject purposeObj = new JSONObject();
+            purposeObj.put("name", validPurposesArray.get(i));
+            purposeObj.put("value", validPurposesArray.get(i));
+            consentPurposeArray.put(purposeObj);
+        }
+        consentCreationRequest.put("consentPurpose", consentPurposeArray);
+
+        // Add attributes with commonAuthId
+        JSONObject attributes = new JSONObject();
+        if (commonAuthId != null) {
+            attributes.put("commonAuthId", commonAuthId);
+        }
+        consentCreationRequest.put("attributes", attributes);
+
+        // Add authorizations array with approved purpose details
+        JSONArray authorizationsArray = new JSONArray();
+        JSONObject authorization = new JSONObject();
+        authorization.put("userId", userId);
+        authorization.put("type", "authorisation");
+        authorization.put("status", "active");
+
+        // Build approvedPurposeDetails
+        JSONObject approvedPurposeDetails = new JSONObject();
+        JSONArray approvedPurposesNames = new JSONArray();
+        for (String purpose : approvedPurposes) {
+            approvedPurposesNames.put(purpose);
+        }
+        approvedPurposeDetails.put("approvedPurposesNames", approvedPurposesNames);
+        authorization.put("approvedPurposeDetails", approvedPurposeDetails);
+
+        authorizationsArray.put(authorization);
+        consentCreationRequest.put("authorizations", authorizationsArray);
+
+        // Set request entity
+        StringEntity entity = new StringEntity(consentCreationRequest.toString(), StandardCharsets.UTF_8);
+        consentRequest.setEntity(entity);
+
+        log.info("Creating consent with authorization at URL: " + consentApiBaseURL);
+        log.debug("Request payload: " + consentCreationRequest.toString());
+
+        HttpResponse consentResponse = client.execute(consentRequest);
+        int statusCode = consentResponse.getStatusLine().getStatusCode();
+
+        // Read response body
+        String responseBody = "";
+        if (consentResponse.getEntity() != null) {
+            responseBody = IOUtils.toString(consentResponse.getEntity().getContent(),
+                    String.valueOf(StandardCharsets.UTF_8));
+        }
+
+        log.info("Consent creation response - Status: " + statusCode + ", Body: " + responseBody);
+
+        client.close();
+
+        if (statusCode == HttpURLConnection.HTTP_OK || statusCode == HttpURLConnection.HTTP_CREATED) {
+            if (!responseBody.isEmpty()) {
+                try {
+                    return new JSONObject(responseBody);
+                } catch (JSONException e) {
+                    log.error("Failed to parse consent response as JSON: " + responseBody, e);
+                    return null;
+                }
+            }
+        }
+
+        log.error("Failed to create consent. Status: " + statusCode + ", Response: " + responseBody);
+        return null;
     }
 
     public static URI authorizeRequest(String consent, Map<String, String> cookies, String user, String sessionDataKey)

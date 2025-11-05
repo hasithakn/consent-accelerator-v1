@@ -28,7 +28,7 @@
 
 <!-- This class mediator is responsible for generating the payload for the consent validation service and is stored in the property 'consentEnforcementPayload' -->
 <class name="org.wso2.financial.services.apim.mediation.policies.consent.enforcement.ConsentEnforcementPayloadMediator">
-    <property name="consentIdClaimName" value="{{consentIdClaimName}}"/>
+    <property name="consentIdClaimName" value="consent_id"/>
 </class>
 
 <!-- Log the JWT payload generated for consent validation -->
@@ -46,7 +46,7 @@
 </payloadFactory>
 
 <!-- Set the request headers required for calling the consent validation service -->
-<header name="Authorization" scope="transport" value="Basic {{consentServiceBasicAuthCredentials}}"/>
+<!-- <header name="Authorization" scope="transport" value="Basic {{consentServiceBasicAuthCredentials}}"/> -->
 <header name="Content-Type" scope="transport" value="application/jwt"/>
 <header name="Accept" scope="transport" value="application/json"/>
 <header name="org-id" scope="transport" value="org1"/>
@@ -61,12 +61,25 @@
 <!-- Call the consent validation endpoint in blocking mode -->
 <call blocking="true">
     <endpoint>
-        <http method="POST" uri-template="{{consentServiceBaseUrl}}/api/v1/validate"/>
+        <http method="POST" uri-template="http://localhost:3000/api/v1/validate"/>
     </endpoint>
 </call>
 
+<!-- Log the raw response immediately after the call -->
+<log level="custom">
+    <property name="Message" value="RAW RESPONSE from consent validation API"/>
+    <property name="ResponseBody" expression="$body"/>
+</log>
+
 <!-- Set message type back to JSON for processing response -->
 <property name="messageType" scope="axis2" value="application/json"/>
+
+<!-- Log after setting message type -->
+<log level="custom">
+    <property name="Message" value="After setting messageType to JSON"/>
+    <property name="CurrentBody" expression="$body"/>
+    <property name="MessageType" expression="get-property('axis2', 'messageType')"/>
+</log>
 
 <!-- Remove headers used for consent service call -->
 <header name="Authorization" scope="transport" action="remove"/>
@@ -92,10 +105,30 @@
     </then>
 </filter>
 
+<!-- Log the full validation response for debugging -->
+<log level="custom">
+    <property name="Message" value="Consent validation response received"/>
+    <property name="FullResponse" expression="json-eval($)"/>
+</log>
+
 <!-- Extract required attributes from the response JSON into properties -->
 <property name="isValid" expression="json-eval($.isValid)" scope="default" type="STRING"/>
 <property name="modifiedPayload" expression="json-eval($.modifiedPayload)" scope="default" type="STRING"/>
 <property name="consentInformation" expression="json-eval($.consentInformation)" scope="default" type="STRING"/>
+
+<!-- Log extracted properties -->
+<log level="custom">
+    <property name="Message" value="Extracted properties from validation response"/>
+    <property name="isValid" expression="$ctx:isValid"/>
+    <property name="consentInformation" expression="$ctx:consentInformation"/>
+</log>
+
+<!-- Log for debugging - check if isValid is being evaluated correctly -->
+<log level="custom">
+    <property name="Message" value="About to check isValid condition"/>
+    <property name="isValid_value" expression="$ctx:isValid"/>
+    <property name="isValid_type" expression="get-property('isValid')"/>
+</log>
 
 <!-- Check if 'isValid' is null -->
 <filter xpath="not($ctx:isValid)">
@@ -111,36 +144,76 @@
 <!-- Check if 'isValid' is true -->
 <filter source="$ctx:isValid" regex="true">
     <then>
-        <property name="approvedPurposes" expression="json-eval($.consentInformation.authResources[0].resource)" scope="default" type="STRING"/>
+        <property name="approvedPurposesNames" expression="json-eval($.consentInformation.authResources[0].approvedPurposeDetails.approvedPurposesNames)" scope="default" type="STRING"/>
         <property name="electedResource" expression="$ctx:api.resource.path" scope="default" type="STRING"/>
+
+        <!-- Log the extracted values for debugging -->
+        <log level="custom">
+            <property name="Message" value="Permission check inputs"/>
+            <property name="approvedPurposesNames" expression="$ctx:approvedPurposesNames"/>
+            <property name="electedResource" expression="$ctx:electedResource"/>
+        </log>
+
         <script language="js">
             <![CDATA[
-                var approvedPurposesStr = mc.getProperty("approvedPurposes");
+                var approvedPurposesStr = mc.getProperty("approvedPurposesNames");
                 var electedResource = mc.getProperty("electedResource");
                 var hasPermission = false;
+
+                // Log input values
+                java.lang.System.out.println("[DEBUG] approvedPurposesStr: " + approvedPurposesStr);
+                java.lang.System.out.println("[DEBUG] electedResource: " + electedResource);
+
                 try {
                     if (approvedPurposesStr && electedResource) {
-                        var approvedData = JSON.parse(approvedPurposesStr);
-                        var purposes = approvedData.approved_purposes || [];
-                        // Map resource path to permission scope
+                        var approvedPurposesArray = JSON.parse(approvedPurposesStr);
+
+                        java.lang.System.out.println("[DEBUG] Parsed approvedPurposesArray: " + JSON.stringify(approvedPurposesArray));
+
+                        // Map resource path to permission scope (with both : and _ formats)
                         var resourceMap = {
-                            "/utilities": "utility:read",
-                            "/licenses": "license:read",
-                            "/taxes": "tax:read"
+                            "/utilities": ["utility:read", "utility_read"],
+                            "/licenses": ["license:read", "license_read"],
+                            "/taxes": ["tax:read", "tax_read"]
                         };
-                        var requiredPermission = resourceMap[electedResource];
-                        if (requiredPermission && purposes.indexOf(requiredPermission) !== -1) {
-                            hasPermission = true;
+
+                        var requiredPermissions = resourceMap[electedResource];
+
+                        java.lang.System.out.println("[DEBUG] Required permissions for resource: " + JSON.stringify(requiredPermissions));
+
+                        if (requiredPermissions && approvedPurposesArray) {
+                            // Check if any of the required permission formats exist in approved purposes
+                            for (var i = 0; i < requiredPermissions.length; i++) {
+                                java.lang.System.out.println("[DEBUG] Checking if '" + requiredPermissions[i] + "' exists in approved purposes");
+                                if (approvedPurposesArray.indexOf(requiredPermissions[i]) !== -1) {
+                                    hasPermission = true;
+                                    mc.setProperty("requiredPermission", requiredPermissions[i]);
+                                    java.lang.System.out.println("[DEBUG] MATCH FOUND: " + requiredPermissions[i]);
+                                    break;
+                                }
+                            }
+
+                            if (!hasPermission) {
+                                mc.setProperty("requiredPermission", requiredPermissions.join(" or "));
+                                java.lang.System.out.println("[DEBUG] NO MATCH FOUND. Required: " + requiredPermissions.join(" or "));
+                            }
+                        } else {
+                            mc.setProperty("requiredPermission", "unknown");
+                            java.lang.System.out.println("[DEBUG] requiredPermissions or approvedPurposesArray is null/undefined");
                         }
+
                         mc.setProperty("hasResourcePermission", hasPermission.toString());
-                        mc.setProperty("requiredPermission", requiredPermission || "unknown");
+                        java.lang.System.out.println("[DEBUG] hasResourcePermission set to: " + hasPermission.toString());
                     } else {
                         mc.setProperty("hasResourcePermission", "false");
                         mc.setProperty("requiredPermission", "unknown");
+                        java.lang.System.out.println("[DEBUG] approvedPurposesStr or electedResource is null/empty");
                     }
                 } catch (e) {
                     mc.setProperty("hasResourcePermission", "false");
                     mc.setProperty("permissionCheckError", e.toString());
+                    mc.setProperty("requiredPermission", "error");
+                    java.lang.System.out.println("[ERROR] Exception in permission check: " + e.toString());
                 }
             ]]>
         </script>
@@ -149,13 +222,14 @@
             <then>
                 <log level="custom">
                     <property name="Message" value="SUCCESS: Resource permission validated, request allowed"/>
+                    <property name="requiredPermission" expression="$ctx:requiredPermission"/>
                 </log>
             </then>
             <else>
                 <log level="custom">
                     <property name="Message" value="ERROR: Resource permission denied"/>
                     <property name="requiredPermission" expression="$ctx:requiredPermission"/>
-                    <property name="approvedPurposes" expression="$ctx:approvedPurposes"/>
+                    <property name="approvedPurposesNames" expression="$ctx:approvedPurposesNames"/>
                 </log>
                 <!-- Resource not in approved purposes - return 403 Forbidden -->
                 <property name="ERROR_CODE" value="Forbidden"/>
