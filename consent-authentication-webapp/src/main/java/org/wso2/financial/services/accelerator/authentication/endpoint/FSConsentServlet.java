@@ -121,7 +121,7 @@ public class FSConsentServlet extends HttpServlet {
     }
 
     /**
-     * Handles the standard consent flow (without JWT request parameter).
+     * Handles the standard consent flow
      *
      * @param sessionData the session data
      * @param statusCode  the HTTP status code
@@ -195,6 +195,12 @@ public class FSConsentServlet extends HttpServlet {
         for (String purpose : validPurposes) {
             validPurposesArray.put(purpose);
         }
+
+
+        
+
+
+
         sessionData.put("validPurposes", validPurposesArray);
 
         // Check for error redirects
@@ -257,12 +263,12 @@ public class FSConsentServlet extends HttpServlet {
         request.setAttribute(Constants.APP, dataSet.getString(Constants.APPLICATION));
 
         // Pass custom values to JSP
-        List<Map<String, String>> accountsData = addAccList(dataSet);
+        List<Map<String, String>> purposeData = addPurposeList(dataSet);
         String applicationName = dataSet.getString(Constants.APPLICATION);
         request.setAttribute("basicConsentData", applicationName +
                 " application is requesting your consent to access the following data: ");
         request.setAttribute("user", user);
-        request.setAttribute("consumerAccounts", accountsData);
+        request.setAttribute("consumerAccounts", purposeData);
 
         // Add user to dataset
         dataSet.put("user", user);
@@ -277,8 +283,8 @@ public class FSConsentServlet extends HttpServlet {
         dispatcher.forward(request, response);
     }
 
-    private List<Map<String, String>> addAccList(JSONObject dataSet) {
-        List<Map<String, String>> accountData = new ArrayList<>();
+    private List<Map<String, String>> addPurposeList(JSONObject dataSet) {
+        List<Map<String, String>> purposeDataMap = new ArrayList<>();
 
         // Extract valid purposes from validPurposes array
         if (dataSet.has("validPurposes")) {
@@ -286,17 +292,17 @@ public class FSConsentServlet extends HttpServlet {
             for (int i = 0; i < validPurposes.length(); i++) {
                 String purpose = validPurposes.getString(i);
                 if (!purpose.equalsIgnoreCase("gov")) {
-                    Map<String, String> account = new HashMap<>();
-                    account.put("value", purpose); // This will be the checkbox value
-                    account.put("label", getPermissionDisplayName(purpose)); // This will be displayed in UI
-                    accountData.add(account);
+                    Map<String, String> purposeMap = new HashMap<>();
+                    purposeMap.put("value", purpose); // This will be the checkbox value
+                    purposeMap.put("label", getPermissionDisplayName(purpose)); // This will be displayed in UI
+                    purposeDataMap.add(purposeMap);
                 }
             }
         } else {
-            log.warn("No validPurposes found in dataSet, returning empty account list");
+            log.warn("No validPurposes found in dataSet, returning empty purpose list");
         }
         
-        return accountData;
+        return purposeDataMap;
     }
 
     /**

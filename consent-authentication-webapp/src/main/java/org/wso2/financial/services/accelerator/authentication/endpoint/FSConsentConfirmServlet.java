@@ -312,7 +312,6 @@ public class FSConsentConfirmServlet extends HttpServlet {
         // Create the full consent creation request with authorization
         JSONObject consentCreationRequest = new JSONObject();
         consentCreationRequest.put("type", "accounts");
-        consentCreationRequest.put("status", "ACTIVE");
 
         // Add validityTime (default to 0 if not provided)
         consentCreationRequest.put("validityTime", validityTime != null ? validityTime : 0);
