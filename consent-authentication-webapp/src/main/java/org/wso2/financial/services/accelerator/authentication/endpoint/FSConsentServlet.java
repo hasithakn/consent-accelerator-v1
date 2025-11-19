@@ -252,19 +252,19 @@ public class FSConsentServlet extends HttpServlet {
         if (dataSet.has("consentDetails")) {
             JSONObject consentDetailsObject = dataSet.getJSONObject("consentDetails");
             if (consentDetailsObject.has("consentPurpose")) {
-                JSONArray validPurposes = dataSet.getJSONArray("consentPurpose");
+                JSONArray validPurposes = consentDetailsObject.getJSONArray("consentPurpose");
                 for (int i = 0; i < validPurposes.length(); i++) {
                     JSONObject purposeObject = validPurposes.getJSONObject(i);
                     Map<String, String> purposeMap = new HashMap<>();
                     purposeMap.put("value", purposeObject.getString("name")); // This will be the checkbox value
                     purposeMap.put("label", getPermissionDisplayName(purposeObject.getString("name")));
-                    purposeMap.put("isSelected",
-                            purposeObject.getString("isSelected").equalsIgnoreCase("true") ? "true" : "false");
+                    purposeMap.put("selected",
+                            purposeObject.getBoolean("isSelected") ? "true" : "false"); // Pre-select if true
                     purposeDataMap.add(purposeMap);
                 }
             }
         } else {
-            log.warn("No validPurposes found in dataSet, returning empty purpose list");
+            log.warn("No validPurposes found in dataSet, returning empty purpose list.");
         }
 
         return purposeDataMap;
@@ -308,15 +308,39 @@ public class FSConsentServlet extends HttpServlet {
 
         // Map known permissions to display names (supporting both : and _ separators)
         switch (normalizedPermission) {
-            case "utility:read":
-            case "utility_read":
-                return "Utility Bills Information";
-            case "license:read":
-            case "license_read":
-                return "Driver's License Information";
-            case "tax:read":
-            case "tax_read":
-                return "Tax Records Information";
+            // Personal identity fields
+            case "first_name":
+            case "first:name":
+                return "First Name";
+            case "middle_name":
+            case "middle:name":
+                return "Middle Name";
+            case "last_name":
+            case "last:name":
+                return "Last Name";
+            case "full_name":
+            case "full:name":
+                return "Full Name";
+            case "date_of_birth":
+            case "date:of:birth":
+            case "dob":
+                return "Date of Birth";
+            case "place_of_birth":
+            case "place:of:birth":
+                return "Place of Birth";
+            case "gender":
+                return "Gender";
+            case "nationality":
+                return "Nationality";
+
+            // Other categories
+            case "identifiers":
+                return "Identifiers";
+            case "contact":
+                return "Contact Details";
+            case "employment":
+                return "Employment Details";
+
             default:
                 return permission;
         }

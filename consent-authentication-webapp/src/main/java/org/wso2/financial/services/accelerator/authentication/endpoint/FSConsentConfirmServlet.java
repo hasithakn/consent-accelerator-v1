@@ -201,7 +201,7 @@ public class FSConsentConfirmServlet extends HttpServlet {
         consentUpdateRequest.put("dataAccessValidityDuration",
                 dataAccessValidityDuration != null ? dataAccessValidityDuration : 86400);
 
-        JSONArray initialConsentPurposeArray = sessionData.getJSONArray("consentPurpose");
+        JSONArray initialConsentPurposeArray = consentUpdateRequest.getJSONArray("consentPurpose");
         // Build consentPurpose array
         JSONArray updatedConsentPurposeArray = new JSONArray();
         for (int i = 0; i < initialConsentPurposeArray.length(); i++) {

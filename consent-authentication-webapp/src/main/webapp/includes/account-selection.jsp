@@ -43,16 +43,59 @@
 </c:if>
 
 <div class="${accountSelectorClass}" style="margin-bottom: 25px;">
-    <c:forEach items="${consumerAccounts}" var="account" varStatus="accountIdx">
-        <%-- Display checkboxes for each account if multiple account selection is allowed --%>
-        <label for="<c:choose><c:when test='${not empty idSuffix}'>${account.value}-${idSuffix}</c:when><c:otherwise>${account.value}</c:otherwise></c:choose>">
-            <input type="checkbox"
-                id="<c:choose><c:when test='${not empty idSuffix}'>${account.value}-${idSuffix}</c:when><c:otherwise>${account.value}</c:otherwise></c:choose>"
-                name="<c:choose><c:when test='${not empty idSuffix}'>accounts-${idSuffix}</c:when><c:otherwise>accounts</c:otherwise></c:choose>"
-                value="${account.value}"
-            />
-            ${account.label}
-        </label>
-        <br>
+    <!-- First render pre-selected accounts (checked and disabled) -->
+    <c:forEach items="${consumerAccounts}" var="account">
+        <c:if test='${account.selected == "true" || account.selected eq true}'>
+            <label for="<c:choose><c:when test='${not empty idSuffix}'>${account.value}-${idSuffix}</c:when><c:otherwise>${account.value}</c:otherwise></c:choose>">
+                <input type="checkbox"
+                    id="<c:choose><c:when test='${not empty idSuffix}'>${account.value}-${idSuffix}</c:when><c:otherwise>${account.value}</c:otherwise></c:choose>"
+                    name="<c:choose><c:when test='${not empty idSuffix}'>accounts-${idSuffix}</c:when><c:otherwise>accounts</c:otherwise></c:choose>"
+                    value="${account.value}"
+                    checked="checked"
+                    disabled="disabled"
+                />
+                ${account.label}
+            </label>
+            <!-- Preserve submitted value for disabled checkbox -->
+            <input type="hidden" name="<c:choose><c:when test='${not empty idSuffix}'>accounts-${idSuffix}</c:when><c:otherwise>accounts</c:otherwise></c:choose>" value="${account.value}" />
+            <br/>
+        </c:if>
+    </c:forEach>
+
+    <!-- Separator between selected and unselected accounts if both groups exist -->
+    <c:set var="hasSelected" value="false" />
+    <c:forEach items="${consumerAccounts}" var="account">
+        <c:if test='${account.selected == "true" || account.selected eq true}'>
+            <c:set var="hasSelected" value="true" />
+        </c:if>
+    </c:forEach>
+
+    <c:set var="hasUnselected" value="false" />
+    <c:forEach items="${consumerAccounts}" var="account">
+        <c:if test='${not (account.selected == "true" || account.selected eq true)}'>
+            <c:set var="hasUnselected" value="true" />
+        </c:if>
+    </c:forEach>
+
+    <c:if test="${hasSelected == 'true' && hasUnselected == 'true'}">
+        <div style="margin: 12px 0;">
+            <h4 style="margin: 6px 0; color: #333; font-size: 16px;">Optional data:</h4>
+            <hr style="border: 0; border-top: 1px dashed #ccc;"/>
+        </div>
+    </c:if>
+
+    <!-- Then render remaining (non-selected) accounts -->
+    <c:forEach items="${consumerAccounts}" var="account">
+        <c:if test='${not (account.selected == "true" || account.selected eq true)}'>
+            <label for="<c:choose><c:when test='${not empty idSuffix}'>${account.value}-${idSuffix}</c:when><c:otherwise>${account.value}</c:otherwise></c:choose>">
+                <input type="checkbox"
+                    id="<c:choose><c:when test='${not empty idSuffix}'>${account.value}-${idSuffix}</c:when><c:otherwise>${account.value}</c:otherwise></c:choose>"
+                    name="<c:choose><c:when test='${not empty idSuffix}'>accounts-${idSuffix}</c:when><c:otherwise>accounts</c:otherwise></c:choose>"
+                    value="${account.value}"
+                />
+                ${account.label}
+            </label>
+            <br/>
+        </c:if>
     </c:forEach>
 </div>
