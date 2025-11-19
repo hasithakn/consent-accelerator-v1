@@ -18,6 +18,23 @@
 
 package org.wso2.financial.services.accelerator.authentication.endpoint;
 
+import java.io.IOException;
+import java.net.HttpURLConnection;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import javax.servlet.RequestDispatcher;
+import javax.servlet.ServletException;
+import javax.servlet.http.HttpServlet;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.HttpSession;
+
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.http.HttpResponse;
@@ -31,23 +48,9 @@ import org.owasp.encoder.Encode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.wso2.financial.services.accelerator.authentication.endpoint.util.AuthenticationUtils;
+import org.wso2.financial.services.accelerator.authentication.endpoint.util.ConsentUtils;
 import org.wso2.financial.services.accelerator.authentication.endpoint.util.Constants;
 import org.wso2.financial.services.accelerator.authentication.endpoint.util.LocalCacheUtil;
-
-import javax.servlet.RequestDispatcher;
-import javax.servlet.ServletContext;
-import javax.servlet.ServletException;
-import javax.servlet.http.HttpServlet;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-import javax.servlet.http.HttpSession;
-import java.io.IOException;
-import java.net.HttpURLConnection;
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.nio.charset.StandardCharsets;
-import java.util.*;
-
 
 /**
  * The servlet responsible for displaying the consent details in the auth UI
@@ -131,77 +134,36 @@ public class FSConsentServlet extends HttpServlet {
      * @throws URISyntaxException if URI construction fails
      */
     private JSONObject handleStandardConsentFlow(JSONObject sessionData, int statusCode,
-                                                 HttpServletResponse response)
+            HttpServletResponse response)
             throws IOException, URISyntaxException {
 
-        String[] purposeStrings = null;
+        String consentId = null;
 
         // First, try to extract purposes from request object if present
         if (sessionData.has("spQueryParams")) {
             String spQueryParams = sessionData.getString("spQueryParams");
-            purposeStrings = extractPurposesFromRequestObject(spQueryParams);
-            
-            if (purposeStrings != null && purposeStrings.length > 0) {
-                log.info("Extracted {} purpose(s) from request object: {}", 
-                        purposeStrings.length, Arrays.toString(purposeStrings));
+            consentId = extractConsentIdFromQueryParams(spQueryParams);
+
+            if (consentId != null && consentId.length() > 0) {
+                log.info("Extracted {} consentId from request object: {}",
+                        consentId.length(), consentId);
             }
         }
 
-        // If no purposes found in request object, fall back to extracting from scopes
-        if (purposeStrings == null || purposeStrings.length == 0) {
-            log.debug("No purposes found in request object, attempting to extract from scopes");
-            
-            String scopesString = sessionData.optString("scopes", "");
-            if (scopesString.isEmpty()) {
-                log.warn("No scopes found in session data, attempting to retrieve from spQueryParams");
-                // Try to extract scopes from spQueryParams if available
-                if (sessionData.has("spQueryParams")) {
-                    String spQueryParams = sessionData.getString("spQueryParams");
-                    // Parse query params for scope parameter
-                    String[] params = spQueryParams.split("&");
-                    for (String param : params) {
-                        if (param.startsWith("scope=")) {
-                            scopesString = java.net.URLDecoder.decode(param.substring(6), "UTF-8");
-                            log.debug("Extracted scopes from spQueryParams: " + scopesString);
-                            break;
-                        }
-                    }
-                }
-            }
-            purposeStrings = extractPurposesFromScopes(scopesString);
-            
-            if (purposeStrings != null && purposeStrings.length > 0) {
-                log.info("Extracted {} purpose(s) from scopes: {}", 
-                        purposeStrings.length, Arrays.toString(purposeStrings));
-            }
+        if (consentId == null || consentId.length() == 0) {
+            log.warn("No consentId found in request object");
+            return null;
         }
 
-        // If still no purposes found, create default consent dataset
-        if (purposeStrings == null || purposeStrings.length == 0) {
-            log.warn("No purpose strings found in request object or scopes, returning session data");
-            return sessionData;
+        JSONObject consentDetails = ConsentUtils.getConsentDetails(consentId, getServletContext());
+
+        if (consentDetails != null) {
+            sessionData.put("consentId", consentId);
+            sessionData.put("consentDetails", consentDetails);
+        } else {
+            log.warn("No consent details found for consentId: " + consentId);
+            return null;
         }
-
-        // Validate the extracted purposes and get back the valid ones
-        String[] validPurposes = validateConsentPurposes(purposeStrings, getServletContext());
-        if (validPurposes == null || validPurposes.length == 0) {
-            log.error("Consent purposes validation failed for: " + Arrays.toString(purposeStrings));
-            return new JSONObject().put(Constants.IS_ERROR, "Invalid consent purposes");
-        }
-        log.info("Consent purposes validated successfully. Valid purposes: " + Arrays.toString(validPurposes));
-
-        // Store valid purposes in sessionData for later use in consent confirmation
-        JSONArray validPurposesArray = new JSONArray();
-        for (String purpose : validPurposes) {
-            validPurposesArray.put(purpose);
-        }
-
-
-        
-
-
-
-        sessionData.put("validPurposes", validPurposesArray);
 
         // Check for error redirects
         String errorResponse = AuthenticationUtils.getErrorResponseForRedirectURL(sessionData);
@@ -223,7 +185,7 @@ public class FSConsentServlet extends HttpServlet {
      * @throws IOException if redirect fails
      */
     private void handleError(HttpServletRequest request, HttpServletResponse response,
-                             JSONObject dataSet) throws IOException {
+            JSONObject dataSet) throws IOException {
         String errorMessage = "Unknown error";
 
         if (dataSet != null && dataSet.has(Constants.IS_ERROR)) {
@@ -246,7 +208,7 @@ public class FSConsentServlet extends HttpServlet {
      * @throws IOException      if forwarding fails
      */
     private void prepareAndForwardToJSP(HttpServletRequest request, HttpServletResponse response,
-                                        String sessionDataKey, JSONObject dataSet, String user)
+            String sessionDataKey, JSONObject dataSet, String user)
             throws ServletException, IOException {
 
         // Set variables to session
@@ -263,15 +225,15 @@ public class FSConsentServlet extends HttpServlet {
         request.setAttribute(Constants.APP, dataSet.getString(Constants.APPLICATION));
 
         // Pass custom values to JSP
-        List<Map<String, String>> purposeData = addPurposeList(dataSet);
         String applicationName = dataSet.getString(Constants.APPLICATION);
         request.setAttribute("basicConsentData", applicationName +
                 " application is requesting your consent to access the following data: ");
         request.setAttribute("user", user);
-        request.setAttribute("consumerAccounts", purposeData);
-
-        // Add user to dataset
         dataSet.put("user", user);
+
+        // selectable data
+        List<Map<String, String>> purposeData = getPurposeList(dataSet);
+        request.setAttribute("consumerAccounts", purposeData);
 
         // Store dataSet in cache with sessionDataKey as the key
         LocalCacheUtil cache = LocalCacheUtil.getInstance();
@@ -283,25 +245,28 @@ public class FSConsentServlet extends HttpServlet {
         dispatcher.forward(request, response);
     }
 
-    private List<Map<String, String>> addPurposeList(JSONObject dataSet) {
+    private List<Map<String, String>> getPurposeList(JSONObject dataSet) {
         List<Map<String, String>> purposeDataMap = new ArrayList<>();
 
         // Extract valid purposes from validPurposes array
-        if (dataSet.has("validPurposes")) {
-            JSONArray validPurposes = dataSet.getJSONArray("validPurposes");
-            for (int i = 0; i < validPurposes.length(); i++) {
-                String purpose = validPurposes.getString(i);
-                if (!purpose.equalsIgnoreCase("gov")) {
+        if (dataSet.has("consentDetails")) {
+            JSONObject consentDetailsObject = dataSet.getJSONObject("consentDetails");
+            if (consentDetailsObject.has("consentPurpose")) {
+                JSONArray validPurposes = dataSet.getJSONArray("consentPurpose");
+                for (int i = 0; i < validPurposes.length(); i++) {
+                    JSONObject purposeObject = validPurposes.getJSONObject(i);
                     Map<String, String> purposeMap = new HashMap<>();
-                    purposeMap.put("value", purpose); // This will be the checkbox value
-                    purposeMap.put("label", getPermissionDisplayName(purpose)); // This will be displayed in UI
+                    purposeMap.put("value", purposeObject.getString("name")); // This will be the checkbox value
+                    purposeMap.put("label", getPermissionDisplayName(purposeObject.getString("name")));
+                    purposeMap.put("isSelected",
+                            purposeObject.getString("isSelected").equalsIgnoreCase("true") ? "true" : "false");
                     purposeDataMap.add(purposeMap);
                 }
             }
         } else {
             log.warn("No validPurposes found in dataSet, returning empty purpose list");
         }
-        
+
         return purposeDataMap;
     }
 
@@ -324,284 +289,11 @@ public class FSConsentServlet extends HttpServlet {
         return client.execute(dataRequest);
 
     }
-    
-    /**
-     * Validate consent purposes using the external validation API.
-     *
-     * @param purposeStrings the purposes to validate
-     * @param servletContext servlet context
-     * @return array of valid purposes, or null if validation fails
-     */
-    String[] validateConsentPurposes(String[] purposeStrings, ServletContext servletContext) {
-        if (purposeStrings == null || purposeStrings.length == 0) {
-            log.warn("No purposes to validate");
-            return null;
-        }
-
-        try {
-            // Construct the validation API URL
-            String validationApiUrl = "http://localhost:3000/api/v1/consent-purposes/validate";
-
-            // Create HTTP client
-            CloseableHttpClient client = HttpClientBuilder.create()
-                    .setRedirectStrategy(new org.apache.http.impl.client.LaxRedirectStrategy())
-                    .build();
-            org.apache.http.client.methods.HttpPost validationRequest =
-                    new org.apache.http.client.methods.HttpPost(validationApiUrl);
-
-            // Add required headers
-            validationRequest.addHeader("org-id", "org1");
-            validationRequest.addHeader("Content-Type", "application/json");
-            validationRequest.addHeader("Accept", "application/json");
-
-            // Build JSON array payload from purposeStrings
-            JSONArray purposesArray = new JSONArray();
-            for (String purpose : purposeStrings) {
-                purposesArray.put(purpose);
-            }
-
-            // Set request entity
-            org.apache.http.entity.StringEntity entity = new org.apache.http.entity.StringEntity(
-                    purposesArray.toString(), StandardCharsets.UTF_8);
-            validationRequest.setEntity(entity);
-
-            log.info("Validating consent purposes at URL: " + validationApiUrl);
-            log.debug("Validation payload: " + purposesArray.toString());
-
-            HttpResponse validationResponse = client.execute(validationRequest);
-            int statusCode = validationResponse.getStatusLine().getStatusCode();
-
-            // Read response body
-            String responseBody = "";
-            if (validationResponse.getEntity() != null) {
-                responseBody = IOUtils.toString(validationResponse.getEntity().getContent(),
-                        String.valueOf(StandardCharsets.UTF_8));
-            }
-
-            log.info("Validation response - Status: " + statusCode +
-                    ", Body: " + responseBody);
-
-            client.close();
-
-            // Check if validation was successful (200 OK)
-            if (statusCode == HttpURLConnection.HTTP_OK) {
-                // Response should be a JSON array of valid purposes: ["utility_read", "license_read"]
-                try {
-                    JSONArray validPurposesArray = new JSONArray(responseBody);
-                    
-                    if (validPurposesArray.length() > 0) {
-                        // Convert JSONArray to String[]
-                        String[] validPurposes = new String[validPurposesArray.length()];
-                        for (int i = 0; i < validPurposesArray.length(); i++) {
-                            validPurposes[i] = validPurposesArray.getString(i);
-                        }
-                        
-                        log.info("Validation successful. Valid purposes count: " + validPurposes.length);
-                        log.debug("Valid purposes: " + Arrays.toString(validPurposes));
-                        return validPurposes;
-                    } else {
-                        log.warn("Validation returned empty array - no valid purposes found");
-                        return null;
-                    }
-                } catch (JSONException e) {
-                    log.error("Failed to parse validation response as JSON array: " + responseBody, e);
-                    return null;
-                }
-            } else {
-                // Error response format: {"code": "BAD_REQUEST", "message": "Invalid request", "details": "no valid purposes found"}
-                try {
-                    JSONObject errorResponse = new JSONObject(responseBody);
-                    String errorCode = errorResponse.optString("code", "UNKNOWN");
-                    String errorMessage = errorResponse.optString("message", "Validation failed");
-                    String errorDetails = errorResponse.optString("details", "");
-                    
-                    log.error("Validation failed - Code: " + errorCode + 
-                            ", Message: " + errorMessage + 
-                            ", Details: " + errorDetails);
-                } catch (JSONException e) {
-                    log.error("Validation failed with status: " + statusCode + 
-                            ", Response: " + responseBody);
-                }
-                return null;
-            }
-
-        } catch (Exception e) {
-            log.error("Error validating consent purposes: " + Arrays.toString(purposeStrings), e);
-            return null;
-        }
-    }
-
-    /**
-     * Create a new consent via external API.
-     *
-     * @param purposeStrings the purposes/permissions for the consent
-     * @param sessionData    the session data containing app and user info
-     * @param servletContext servlet context
-     * @return created consent details JSON object
-     * @throws IOException if an error occurs while creating consent
-     */
-    JSONObject createConsent(String[] purposeStrings, JSONObject sessionData, ServletContext servletContext)
-            throws IOException {
-
-        String consentApiBaseURL =  "http://localhost:3000/api/v1/consents";
-        consentApiBaseURL = consentApiBaseURL.replaceAll("/$", "");
-
-        CloseableHttpClient client = HttpClientBuilder.create()
-                .setRedirectStrategy(new org.apache.http.impl.client.LaxRedirectStrategy()).build();
-        org.apache.http.client.methods.HttpPost consentRequest =
-                new org.apache.http.client.methods.HttpPost(consentApiBaseURL);
-
-        // Add required headers
-        String orgId = "org1";
-        String clientId = "clientId1";
-        consentRequest.addHeader("org-id", orgId);
-        consentRequest.addHeader("client-id", clientId);
-        consentRequest.addHeader("Content-Type", "application/json");
-        consentRequest.addHeader("Accept", "application/json");
-        JSONObject requestPayload = new JSONObject();
-        JSONObject data = new JSONObject();
-        // Add permissions from purpose strings
-        JSONArray permissions = new JSONArray();
-        for (String purpose : purposeStrings) {
-            permissions.put(purpose);
-        }
-        data.put("Permissions", permissions);
-        requestPayload.put("Data", data);
-        // Create the full consent creation request
-        JSONObject consentCreationRequest = new JSONObject();
-        consentCreationRequest.put("type", "gov");
-        consentCreationRequest.put("clientId", clientId);
-        consentCreationRequest.put("requestPayload", requestPayload);
-        consentCreationRequest.put("status", "CREATED");
-
-        // Set request entity
-        org.apache.http.entity.StringEntity entity = new org.apache.http.entity.StringEntity(
-                consentCreationRequest.toString(), StandardCharsets.UTF_8);
-        consentRequest.setEntity(entity);
-        HttpResponse consentResponse = client.execute(consentRequest);
-        int statusCode = consentResponse.getStatusLine().getStatusCode();
-
-        String responseBody = "";
-        if (consentResponse.getEntity() != null) {
-            responseBody = IOUtils.toString(consentResponse.getEntity().getContent(),
-                    String.valueOf(StandardCharsets.UTF_8));
-        }
-        if (statusCode == HttpURLConnection.HTTP_OK || statusCode == HttpURLConnection.HTTP_CREATED) {
-            if (responseBody.isEmpty()) {
-                log.error("Consent creation returned success but empty response body");
-                return null;
-            }
-            try {
-                JSONObject createdConsent = new JSONObject(responseBody);
-                log.info("Successfully created consent. Response keys: " + createdConsent.keys().toString());
-                log.info("Full response: " + responseBody);
-                return createdConsent;
-            } catch (JSONException e) {
-                log.error("Failed to parse consent response as JSON: " + responseBody, e);
-                return null;
-            }
-        } else {
-            log.error("Failed to create consent. Status code: " + statusCode +
-                    ", Reason: " + consentResponse.getStatusLine().getReasonPhrase() +
-                    ", Response: " + responseBody);
-            return null;
-        }
-    }
-
-    /**
-     * Transform consent details from external API format to required format.
-     *
-     * @param consentDetails the consent details from external API
-     * @param sessionData    the original data object containing application info
-     * @return transformed consent data JSON object
-     */
-    JSONObject transformConsentDetails(JSONObject consentDetails, JSONObject sessionData) {
-        try {
-            JSONObject result = new JSONObject();
-
-            // Get type from consent details (e.g., "accounts", "gov")
-            String consentType = consentDetails.optString("type", "gov");
-            result.put("type", consentType);
-
-            // Build consentData object
-            JSONObject consentData = new JSONObject();
-            consentData.put("initiatedAccountsForConsent", new org.json.JSONArray());
-            consentData.put("allowMultipleAccounts", true);
-            consentData.put("isReauthorization", false);
-            consentData.put("additionalProperties", new JSONObject());
-            consentData.put("type", consentType);
-
-            // Build basicConsentData
-            JSONObject basicConsentData = new JSONObject();
-            if (consentDetails.has("requestPayload")) {
-                JSONObject requestPayload = consentDetails.getJSONObject("requestPayload");
-                if (requestPayload.has("Data")) {
-                    JSONObject requestData = requestPayload.getJSONObject("Data");
-
-                    // Extract ExpirationDateTime
-                    if (requestData.has("ExpirationDateTime")) {
-                        org.json.JSONArray expirationArray = new org.json.JSONArray();
-                        expirationArray.put(requestData.getString("ExpirationDateTime"));
-                        basicConsentData.put("Expiration Date Time", expirationArray);
-                    }
-                }
-            }
-            consentData.put("basicConsentData", basicConsentData);
-
-            // Add attributes if available
-            if (consentDetails.has("attributes")) {
-                consentData.put("additionalProperties", consentDetails.getJSONObject("attributes"));
-            }
-
-            result.put("consentData", consentData);
-
-            // Build consumerData object
-            JSONObject consumerData = new JSONObject();
-            org.json.JSONArray accountsArray = new org.json.JSONArray();
-
-            // Extract permissions and map to accounts
-            if (consentDetails.has("requestPayload")) {
-                JSONObject requestPayload = consentDetails.getJSONObject("requestPayload");
-                if (requestPayload.has("Data")) {
-                    JSONObject requestData = requestPayload.getJSONObject("Data");
-
-                    if (requestData.has("Permissions")) {
-                        org.json.JSONArray permissions = requestData.getJSONArray("Permissions");
-                        for (int i = 0; i < permissions.length(); i++) {
-                            String permission = permissions.getString(i);
-                            if (!permission.equalsIgnoreCase("gov")) {
-                                JSONObject account = new JSONObject();
-                                account.put("accountId", permission); // Keep original permission as accountId
-                                account.put("displayName", getPermissionDisplayName(permission));
-                                account.put("additionalProperties", new JSONObject());
-                                account.put("selected", JSONObject.NULL);
-                                accountsArray.put(account);
-                            }
-                        }
-                    }
-                }
-            }
-
-            consumerData.put("accounts", accountsArray);
-            consumerData.put("additionalProperties", new JSONObject());
-            result.put("consumerData", consumerData);
-
-            // Get application name from original data or use clientId from consent details
-            String application = sessionData.optString("application",
-                    consentDetails.optString("clientId", "TPP_APP_1"));
-            result.put("application", application);
-
-            return result;
-
-        } catch (JSONException e) {
-            log.error("Error transforming consent details", e);
-            return null;
-        }
-    }
 
     /**
      * Map permission codes to user-friendly display names.
-     * Handles both colon-separated (utility:read) and underscore-separated (utility_read) formats.
+     * Handles both colon-separated (utility:read) and underscore-separated
+     * (utility_read) formats.
      *
      * @param permission the permission code
      * @return user-friendly display name
@@ -635,18 +327,19 @@ public class FSConsentServlet extends HttpServlet {
      * The request object is a JWT that contains consent_purposes array.
      *
      * @param spQueryParams the query parameters string
-     * @return array of purpose strings from request object, or empty array if not found
+     * @return array of purpose strings from request object, or empty array if not
+     *         found
      */
-    String[] extractPurposesFromRequestObject(String spQueryParams) {
+    String extractConsentIdFromQueryParams(String spQueryParams) {
         if (spQueryParams == null || spQueryParams.trim().isEmpty()) {
-            return new String[0];
+            return null;
         }
 
         try {
             // Parse query params to find 'request' parameter
             String[] params = spQueryParams.split("&");
             String requestObjectJwt = null;
-            
+
             for (String param : params) {
                 if (param.startsWith("request=")) {
                     requestObjectJwt = java.net.URLDecoder.decode(param.substring(8), "UTF-8");
@@ -657,88 +350,53 @@ public class FSConsentServlet extends HttpServlet {
 
             if (requestObjectJwt == null || requestObjectJwt.isEmpty()) {
                 log.debug("No request object found in spQueryParams");
-                return new String[0];
+                return null;
             }
 
-            // Decode JWT (assuming it's a simple JWT without signature verification for now)
+            // Decode JWT (assuming it's a simple JWT without signature verification for
+            // now)
             // JWT format: header.payload.signature
             String[] jwtParts = requestObjectJwt.split("\\.");
-            
+
             if (jwtParts.length < 2) {
                 log.warn("Invalid JWT format in request object");
-                return new String[0];
+                return null;
             }
 
             // Decode the payload (second part)
             String payloadEncoded = jwtParts[1];
             byte[] decodedBytes = java.util.Base64.getUrlDecoder().decode(payloadEncoded);
             String payloadJson = new String(decodedBytes, StandardCharsets.UTF_8);
-            
+
             log.debug("Decoded request object payload: " + payloadJson);
 
             // Parse JSON payload
             JSONObject requestObject = new JSONObject(payloadJson);
 
-            // Extract consent_purposes array
-            if (requestObject.has("consent_purposes")) {
-                JSONArray consentPurposes = requestObject.getJSONArray("consent_purposes");
-                List<String> purposes = new ArrayList<>();
-                
-                for (int i = 0; i < consentPurposes.length(); i++) {
-                    String purpose = consentPurposes.getString(i);
-                    if (purpose != null && !purpose.trim().isEmpty()) {
-                        purposes.add(purpose);
+            // First try to extract consent ID from claims.id_token.intent_id.value
+            try {
+                if (requestObject.has("claims")) {
+                    JSONObject claims = requestObject.getJSONObject("claims");
+                    if (claims.has("id_token")) {
+                        JSONObject idToken = claims.getJSONObject("id_token");
+                        if (idToken.has("intent_id")) {
+                            JSONObject intent = idToken.getJSONObject("intent_id");
+                            String consentId = intent.optString("value", "");
+                            if (consentId != null && !consentId.trim().isEmpty()) {
+                                log.info("Extracted consent id from request object's intent_id: {}", consentId);
+                                return consentId;
+                            }
+                        }
                     }
                 }
-                
-                if (!purposes.isEmpty()) {
-                    log.info("Successfully extracted {} consent purposes from request object", purposes.size());
-                    return purposes.toArray(new String[0]);
-                }
-            } else {
-                log.debug("Request object does not contain 'consent_purposes' field");
+            } catch (JSONException e) {
+                log.debug("Error while extracting intent_id from request object, falling back to consent_purposes", e);
             }
 
         } catch (Exception e) {
             log.error("Error extracting purposes from request object", e);
         }
 
-        return new String[0];
-    }
-
-    /**
-     * Extract purpose strings from scopes.
-     * Scopes may be space-separated or comma-separated.
-     * Filters out common OAuth scopes (openid, profile, email, etc.)
-     * and consent_id_ scopes.
-     *
-     * @param scopesString the scopes string (space or comma separated)
-     * @return array of purpose strings
-     */
-    String[] extractPurposesFromScopes(String scopesString) {
-        if (scopesString == null || scopesString.trim().isEmpty()) {
-            return new String[0];
-        }
-
-        // Split by space or comma
-        String[] scopes = scopesString.trim().split("[\\s,]+");
-
-        // Filter out OAuth standard scopes and consent_id scopes
-        java.util.List<String> purposes = new java.util.ArrayList<>();
-        for (String scope : scopes) {
-            scope = scope.trim();
-            // Skip empty, standard OAuth scopes, and consent_id scopes
-            if (!scope.isEmpty() &&
-                    !scope.equalsIgnoreCase("openid") &&
-                    !scope.equalsIgnoreCase("profile") &&
-                    !scope.equalsIgnoreCase("email") &&
-                    !scope.equalsIgnoreCase("address") &&
-                    !scope.equalsIgnoreCase("phone") &&
-                    !scope.startsWith("consent_id_")) {
-                purposes.add(scope);
-            }
-        }
-
-        return purposes.toArray(new String[0]);
+        return null;
     }
 }

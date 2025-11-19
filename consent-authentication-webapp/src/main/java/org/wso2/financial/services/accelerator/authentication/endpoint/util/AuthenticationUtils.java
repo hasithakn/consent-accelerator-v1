@@ -18,29 +18,20 @@
 
 package org.wso2.financial.services.accelerator.authentication.endpoint.util;
 
-import org.json.JSONObject;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.wso2.financial.services.accelerator.authentication.endpoint.FSConsentConfirmServlet;
-import org.wso2.financial.services.accelerator.authentication.endpoint.i18n.UTF8Control;
-
-import java.io.IOException;
-import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
-import java.lang.reflect.InvocationTargetException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.util.Base64;
 import java.util.Locale;
-import java.util.Properties;
 import java.util.ResourceBundle;
+
+import org.json.JSONObject;
+import org.wso2.financial.services.accelerator.authentication.endpoint.i18n.UTF8Control;
 
 /**
  * Utility class for authentication related operations.
  */
 public class AuthenticationUtils {
 
-    private static final Logger log = LoggerFactory.getLogger(AuthenticationUtils.class);
     private static final String BUNDLE = "org.wso2.financial.services.accelerator.authentication.endpoint.i18n";
 
     /**
