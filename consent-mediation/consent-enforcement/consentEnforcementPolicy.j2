@@ -61,9 +61,9 @@
 <!-- Call the consent validation endpoint in blocking mode -->
 <call blocking="true">
     <endpoint>
-        <http method="POST" uri-template="http://localhost:3000/api/v1/validate"/>
+        <http method="POST" uri-template="http://localhost:3000/api/v1/consents/validate"/>
     </endpoint>
-</call>
+</call> 
 
 <!-- Log the raw response immediately after the call -->
 <log level="custom">
@@ -160,75 +160,80 @@
 <!-- Check if 'isValid' is true -->
 <filter source="$ctx:isValid" regex="true">
     <then>
-        <property name="approvedPurposesNames" expression="json-eval($.consentInformation.authResources[0].approvedPurposeDetails.approvedPurposesNames)" scope="default" type="STRING"/>
+        <!-- Extract consent purposes array and requested resource path -->
+        <property name="consentPurposes" expression="json-eval($.consentInformation.consentPurpose)" scope="default" type="STRING"/>
         <property name="electedResource" expression="$ctx:api.resource.path" scope="default" type="STRING"/>
+        <property name="userId" expression="json-eval($.consentInformation.authorizations[0].userId)" scope="default" type="STRING"/>
 
         <!-- Log the extracted values for debugging -->
         <log level="custom">
-            <property name="Message" value="Permission check inputs"/>
-            <property name="approvedPurposesNames" expression="$ctx:approvedPurposesNames"/>
+            <property name="Message" value="Consent purposes and resource extraction"/>
+            <property name="consentPurposes" expression="$ctx:consentPurposes"/>
             <property name="electedResource" expression="$ctx:electedResource"/>
+            <property name="userId" expression="$ctx:userId"/>
         </log>
 
+        <!-- JavaScript to parse consent purposes, validate resource path, and collect approved jsonPaths -->
         <script language="js">
             <![CDATA[
-                var approvedPurposesStr = mc.getProperty("approvedPurposesNames");
+                var consentPurposesStr = mc.getProperty("consentPurposes");
                 var electedResource = mc.getProperty("electedResource");
+                var userId = mc.getProperty("userId");
                 var hasPermission = false;
+                var approvedJsonPaths = [];
 
-                // Log input values
-                java.lang.System.out.println("[DEBUG] approvedPurposesStr: " + approvedPurposesStr);
+                java.lang.System.out.println("[DEBUG] consentPurposesStr: " + consentPurposesStr);
                 java.lang.System.out.println("[DEBUG] electedResource: " + electedResource);
+                java.lang.System.out.println("[DEBUG] userId: " + userId);
 
                 try {
-                    if (approvedPurposesStr && electedResource) {
-                        var approvedPurposesArray = JSON.parse(approvedPurposesStr);
+                    if (consentPurposesStr && electedResource) {
+                        var consentPurposesArray = JSON.parse(consentPurposesStr);
+                        java.lang.System.out.println("[DEBUG] Parsed consentPurposesArray length: " + consentPurposesArray.length);
 
-                        java.lang.System.out.println("[DEBUG] Parsed approvedPurposesArray: " + JSON.stringify(approvedPurposesArray));
-
-                        // Map resource path to permission scope (with both : and _ formats)
-                        var resourceMap = {
-                            "/utilities": ["utility:read", "utility_read"],
-                            "/licenses": ["license:read", "license_read"],
-                            "/taxes": ["tax:read", "tax_read"]
-                        };
-
-                        var requiredPermissions = resourceMap[electedResource];
-
-                        java.lang.System.out.println("[DEBUG] Required permissions for resource: " + JSON.stringify(requiredPermissions));
-
-                        if (requiredPermissions && approvedPurposesArray) {
-                            // Check if any of the required permission formats exist in approved purposes
-                            for (var i = 0; i < requiredPermissions.length; i++) {
-                                java.lang.System.out.println("[DEBUG] Checking if '" + requiredPermissions[i] + "' exists in approved purposes");
-                                if (approvedPurposesArray.indexOf(requiredPermissions[i]) !== -1) {
+                        // Iterate through consent purposes to find approved ones matching the resource path
+                        for (var i = 0; i < consentPurposesArray.length; i++) {
+                            var purpose = consentPurposesArray[i];
+                            
+                            if (purpose.isSelected === true && purpose.attributes && purpose.attributes.resourcePath) {
+                                var resourcePath = purpose.attributes.resourcePath;
+                                var jsonPath = purpose.attributes.jsonPath;
+                                
+                                java.lang.System.out.println("[DEBUG] Purpose: " + purpose.name + ", isSelected: " + purpose.isSelected + 
+                                                            ", resourcePath: " + resourcePath + ", jsonPath: " + jsonPath);
+                                
+                                // Check if the resource path matches the requested resource (with {nic} placeholder)
+                                // Convert /user/{nic} pattern to match /user/123456789V
+                                var resourcePattern = resourcePath.replace("{nic}", "[^/]+");
+                                var regex = new RegExp("^" + resourcePattern + "$");
+                                
+                                if (regex.test(electedResource)) {
                                     hasPermission = true;
-                                    mc.setProperty("requiredPermission", requiredPermissions[i]);
-                                    java.lang.System.out.println("[DEBUG] MATCH FOUND: " + requiredPermissions[i]);
-                                    break;
+                                    if (jsonPath) {
+                                        approvedJsonPaths.push(jsonPath);
+                                        java.lang.System.out.println("[DEBUG] Approved jsonPath added: " + jsonPath);
+                                    }
                                 }
                             }
-
-                            if (!hasPermission) {
-                                mc.setProperty("requiredPermission", requiredPermissions.join(" or "));
-                                java.lang.System.out.println("[DEBUG] NO MATCH FOUND. Required: " + requiredPermissions.join(" or "));
-                            }
-                        } else {
-                            mc.setProperty("requiredPermission", "unknown");
-                            java.lang.System.out.println("[DEBUG] requiredPermissions or approvedPurposesArray is null/undefined");
                         }
 
+                        java.lang.System.out.println("[DEBUG] Total approved jsonPaths: " + approvedJsonPaths.length);
+                        java.lang.System.out.println("[DEBUG] Approved jsonPaths: " + JSON.stringify(approvedJsonPaths));
+
+                        // Store results in context
                         mc.setProperty("hasResourcePermission", hasPermission.toString());
-                        java.lang.System.out.println("[DEBUG] hasResourcePermission set to: " + hasPermission.toString());
+                        mc.setProperty("approvedJsonPaths", JSON.stringify(approvedJsonPaths));
+                        
+                        java.lang.System.out.println("[DEBUG] hasResourcePermission: " + hasPermission);
                     } else {
                         mc.setProperty("hasResourcePermission", "false");
-                        mc.setProperty("requiredPermission", "unknown");
-                        java.lang.System.out.println("[DEBUG] approvedPurposesStr or electedResource is null/empty");
+                        mc.setProperty("approvedJsonPaths", "[]");
+                        java.lang.System.out.println("[DEBUG] consentPurposesStr or electedResource is null/empty");
                     }
                 } catch (e) {
                     mc.setProperty("hasResourcePermission", "false");
+                    mc.setProperty("approvedJsonPaths", "[]");
                     mc.setProperty("permissionCheckError", e.toString());
-                    mc.setProperty("requiredPermission", "error");
                     java.lang.System.out.println("[ERROR] Exception in permission check: " + e.toString());
                 }
             ]]>
@@ -237,15 +242,23 @@
         <filter source="$ctx:hasResourcePermission" regex="true">
             <then>
                 <log level="custom">
-                    <property name="Message" value="SUCCESS: Resource permission validated, request allowed"/>
-                    <property name="requiredPermission" expression="$ctx:requiredPermission"/>
+                    <property name="Message" value="SUCCESS: Resource permission validated, request allowed to proceed"/>
+                    <property name="approvedJsonPaths" expression="$ctx:approvedJsonPaths"/>
                 </log>
+
+                <!-- Restore original request body for backend API call -->
+                <payloadFactory media-type="json">
+                    <format>$1</format>
+                    <args>
+                        <arg expression="$ctx:originalRequestJsonBody"/>
+                    </args>
+                </payloadFactory>
+
             </then>
             <else>
                 <log level="custom">
-                    <property name="Message" value="ERROR: Resource permission denied"/>
-                    <property name="requiredPermission" expression="$ctx:requiredPermission"/>
-                    <property name="approvedPurposesNames" expression="$ctx:approvedPurposesNames"/>
+                    <property name="Message" value="ERROR: Resource permission denied - no matching approved purposes"/>
+                    <property name="electedResource" expression="$ctx:electedResource"/>
                 </log>
                 
                 <!-- Build error response for insufficient permissions -->
@@ -255,12 +268,11 @@
                             "code": "Forbidden",
                             "type": "Insufficient Permissions",
                             "message": "The consent does not include permission to access this resource",
-                            "description": "Required permission: $1. Approved purposes: $2"
+                            "description": "No approved consent purposes found for resource: $1"
                         }
                     </format>
                     <args>
-                        <arg expression="get-property('requiredPermission')" evaluator="xml"/>
-                        <arg expression="get-property('approvedPurposesNames')" evaluator="xml"/>
+                        <arg expression="get-property('electedResource')" evaluator="xml"/>
                     </args>
                 </payloadFactory>
                 

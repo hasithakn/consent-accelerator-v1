@@ -18,7 +18,10 @@
 
 package org.wso2.financial.services.apim.mediation.policies.consent.enforcement;
 
-import com.nimbusds.jose.JOSEException;
+import java.io.UnsupportedEncodingException;
+import java.util.HashMap;
+import java.util.Map;
+
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -32,11 +35,6 @@ import org.json.JSONObject;
 import org.wso2.financial.services.apim.mediation.policies.consent.enforcement.constants.ConsentEnforcementConstants;
 import org.wso2.financial.services.apim.mediation.policies.consent.enforcement.utils.ConsentEnforcementUtils;
 import org.wso2.financial.services.apim.mediation.policies.consent.enforcement.utils.Generated;
-
-import java.io.UnsupportedEncodingException;
-import java.text.ParseException;
-import java.util.HashMap;
-import java.util.Map;
 
 /**
  * Mediator to generate the payload required to be sent for the consent validation service.
