@@ -18,6 +18,8 @@
 
 package org.wso2.financial.services.apim.mediation.policies.consent.enforcement;
 
+import java.io.UnsupportedEncodingException;
+
 import org.apache.axis2.context.MessageContext;
 import org.apache.synapse.SynapseException;
 import org.apache.synapse.commons.json.JsonUtil;
@@ -32,11 +34,6 @@ import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
 import org.wso2.financial.services.apim.mediation.policies.consent.enforcement.utils.ConsentEnforcementUtils;
 
-import java.io.UnsupportedEncodingException;
-import java.text.ParseException;
-import java.util.HashMap;
-import java.util.Map;
-
 /**
  * Test class for ConsentEnforcementPayloadMediator.
  */
@@ -45,7 +42,6 @@ public class ConsentEnforcementPayloadMediatorTest {
     private ConsentEnforcementPayloadMediator mediator;
     private Axis2MessageContext axis2Ctx;
     private MessageContext synapseCtx;
-    private Map<String, String> headers;
 
     MockedStatic<ConsentEnforcementUtils> consentEnforcementUtilsMockedStatic;
     MockedStatic<JsonUtil> jsonUtilMockedStatic;
@@ -57,7 +53,6 @@ public class ConsentEnforcementPayloadMediatorTest {
 
         synapseCtx = Mockito.mock(MessageContext.class);
         axis2Ctx = Mockito.mock(Axis2MessageContext.class);
-        headers = new HashMap<>();
 
         Mockito.when(axis2Ctx.getAxis2MessageContext()).thenReturn(synapseCtx);
 
