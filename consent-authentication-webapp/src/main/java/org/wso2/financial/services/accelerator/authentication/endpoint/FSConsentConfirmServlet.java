@@ -21,6 +21,7 @@ package org.wso2.financial.services.accelerator.authentication.endpoint;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.URLDecoder;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -221,10 +222,34 @@ public class FSConsentConfirmServlet extends HttpServlet {
         }
         consentUpdateRequest.put("consentPurpose", updatedConsentPurposeArray);
 
-        // Add attributes with commonAuthId
+        // Add attributes with commonAuthId and optionally auth_req_id for CIBA flows
         JSONObject attributes = new JSONObject();
         if (commonAuthId != null) {
             attributes.put("commonAuthId", commonAuthId);
+        }
+
+        try {
+            String spQueryParams = sessionData.optString("spQueryParams", null);
+            if (spQueryParams != null && !spQueryParams.isEmpty()) {
+                String[] pairs = spQueryParams.split("&");
+                Map<String, String> params = new HashMap<>();
+                for (String pair : pairs) {
+                    int idx = pair.indexOf('=');
+                    if (idx > 0) {
+                        String key = URLDecoder.decode(pair.substring(0, idx), "UTF-8");
+                        String value = URLDecoder.decode(pair.substring(idx + 1), "UTF-8");
+                        params.put(key, value);
+                    }
+                }
+                String responseType = params.get("response_type");
+                String nonce = params.get("nonce");
+                if ("cibaAuthCode".equals(responseType) && nonce != null && !nonce.isEmpty()) {
+                    attributes.put("auth_req_id", nonce);
+                    log.info("Added auth_req_id attribute from spQueryParams nonce: {}", nonce);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to parse spQueryParams for auth_req_id", e);
         }
         consentUpdateRequest.put("attributes", attributes);
 

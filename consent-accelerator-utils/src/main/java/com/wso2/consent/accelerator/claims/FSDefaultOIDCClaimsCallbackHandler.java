@@ -16,7 +16,7 @@
  * under the License.
  */
 
-package com.wso2.consent.accelerator;
+package com.wso2.consent.accelerator.claims;
 
 import com.nimbusds.jwt.JWTClaimsSet;
 import org.apache.commons.lang3.StringUtils;

@@ -16,7 +16,7 @@
  * under the License.
  */
 
-package com.wso2.consent.accelerator;
+package com.wso2.consent.accelerator.response.handler;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.ArrayUtils;
@@ -164,10 +164,10 @@ public class ConsentHybridResponseTypeHandler extends HybridResponseTypeHandler 
 
                 if (responseJson.has("consentIds")) {
                     JSONArray consentIds = responseJson.getJSONArray("consentIds");
-                    
+
                     if (consentIds.length() > 0) {
                         String consentId = consentIds.getString(0);
-                        
+
                         if (consentId != null && !consentId.isEmpty()) {
                             if (log.isDebugEnabled()) {
                                 log.debug("Successfully extracted consent ID: " + consentId +

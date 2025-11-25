@@ -16,6 +16,7 @@
         <module>consent-accelerator-utils</module>
         <module>consent-authentication-webapp</module>
         <module>consent-mediation</module>
+        <module>ciba-authenticator</module>
     </modules>
 
     <repositories>
@@ -75,17 +76,16 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.source>11</maven.compiler.source>
         <maven.compiler.target>11</maven.compiler.target>
-        
+
         <!-- WSO2 Versions -->
-        <wso2.carbon.kernel.version>4.6.1</wso2.carbon.kernel.version>
-        <carbon.identity.framework.version>5.25.522</carbon.identity.framework.version>
+        <wso2.carbon.kernel.version>4.10.42.21</wso2.carbon.kernel.version>
+        <carbon.identity.framework.version>7.8.23.73</carbon.identity.framework.version>
         <carbon.identity.oauth.version>7.0.259.26</carbon.identity.oauth.version>
         <carbon.identity.local.auth.api.version>2.4.0</carbon.identity.local.auth.api.version>
-        
+
         <!-- Dependency Versions -->
         <commons.logging.version>1.2</commons.logging.version>
         <apache.felix.ds.annotations.version>1.2.8</apache.felix.ds.annotations.version>
-        <openbanking.accelerator.version>[3.0.0.310, 4.0.0)</openbanking.accelerator.version>
         <swagger.jaxrs.version>1.5.20</swagger.jaxrs.version>
         <jstl.version>1.2</jstl.version>
         <slf4j.version>1.7.32</slf4j.version>
@@ -100,7 +100,7 @@
         <taglibs.standard.version>1.2.5</taglibs.standard.version>
         <tomcat.catalina.version>9.0.80</tomcat.catalina.version>
         <findsecbugs.version>1.12.0</findsecbugs.version>
-        
+
         <!-- Plugin Versions -->
         <maven.compiler.plugin.version>3.8.1</maven.compiler.plugin.version>
         <maven.bundle.plugin.version>5.1.9</maven.bundle.plugin.version>
@@ -121,6 +121,11 @@
             <dependency>
                 <groupId>org.wso2.carbon.identity.inbound.auth.oauth2</groupId>
                 <artifactId>org.wso2.carbon.identity.oauth</artifactId>
+                <version>${carbon.identity.oauth.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.wso2.carbon.identity.inbound.auth.oauth2</groupId>
+                <artifactId>org.wso2.carbon.identity.oauth.ciba</artifactId>
                 <version>${carbon.identity.oauth.version}</version>
             </dependency>
             <dependency>
@@ -153,7 +158,7 @@
                 <artifactId>org.wso2.carbon.identity.local.auth.api.core</artifactId>
                 <version>${carbon.identity.local.auth.api.version}</version>
             </dependency>
-            
+
             <!-- Webapp Dependencies -->
             <dependency>
                 <groupId>io.swagger</groupId>
