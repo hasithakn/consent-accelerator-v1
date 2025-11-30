@@ -17,6 +17,8 @@
 --%>
 
 <div class="row">
-    <img src="images/logo-dark.svg"
-         class="img-responsive brand-spacer login-logo" alt="WSO2 Open Banking"/>
+    <div style="padding: 20px 0; text-align: center;">
+        <h1 style="margin: 0; color: #0078d4; font-size: 32px; font-weight: 600;">Government Consent Portal</h1>
+        <p style="margin: 8px 0 0 0; color: #605e5c; font-size: 14px;">Secure Data Authorization</p>
+    </div>
 </div>

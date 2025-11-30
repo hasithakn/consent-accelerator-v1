@@ -25,10 +25,10 @@
 
 <!-- Consent Page Heading -->
 <div style="margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #0078d4;">
-    <h2 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 600;">
+    <h2 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 700; text-shadow: 2px 2px 4px rgba(0,0,0,0.8);">
         Consent Authorization Request
     </h2>
-    <p style="margin: 8px 0 0 0; color: #605e5c; font-size: 14px;">
+    <p style="margin: 8px 0 0 0; color: #ffffff; font-size: 14px; font-weight: 600; text-shadow: 1px 1px 3px rgba(0,0,0,0.8);">
         Review and authorize the following information access
     </p>
 </div>
@@ -80,7 +80,7 @@
 
     <c:if test="${hasMandatory == 'true' && hasOptional == 'true'}">
         <div style="margin: 12px 0;">
-            <h4 style="margin: 6px 0; color: #333; font-size: 16px;">Optional data:</h4>
+            <h4 style="margin: 6px 0; color: #ffffff; font-size: 16px; font-weight: 700; text-shadow: 1px 1px 3px rgba(0,0,0,0.8);">Optional data:</h4>
             <hr style="border: 0; border-top: 1px dashed #ccc;"/>
         </div>
     </c:if>

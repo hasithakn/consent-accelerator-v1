@@ -36,7 +36,7 @@
                 <div class="container">
                     <div class="login-form-wrapper">
 
-                        <%--Display consent open banking logo--%>
+                        <%--Display consent logo--%>
                         <jsp:include page="includes/logo.jsp"/>
 
                         <div class="row data-container">

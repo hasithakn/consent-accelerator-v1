@@ -19,7 +19,7 @@
 <%@ page contentType="text/html;charset=UTF-8" language="java" %>
 <footer class="footer">
     <div class="container-fluid">
-        <p>WSO2 Open Banking <script>document.write(new Date().getFullYear());</script>
+        <p>Government Consent Portal <script>document.write(new Date().getFullYear());</script>
         </p>
     </div>
 </footer>
