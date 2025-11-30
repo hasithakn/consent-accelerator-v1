@@ -258,8 +258,10 @@ public class FSConsentServlet extends HttpServlet {
                     Map<String, String> purposeMap = new HashMap<>();
                     purposeMap.put("value", purposeObject.getString("name")); // This will be the checkbox value
                     purposeMap.put("label", getPermissionDisplayName(purposeObject.getString("name")));
-                    purposeMap.put("selected",
-                            purposeObject.getBoolean("isSelected") ? "true" : "false"); // Pre-select if true
+                    purposeMap.put("isUserApproved",
+                            purposeObject.getBoolean("isUserApproved") ? "true" : "false"); // Pre-select if true
+                    purposeMap.put("isMandatory",
+                            purposeObject.getBoolean("isMandatory") ? "true" : "false"); // Pre-select if true
                     purposeDataMap.add(purposeMap);
                 }
             }

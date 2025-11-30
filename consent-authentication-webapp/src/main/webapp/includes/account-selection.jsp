@@ -43,9 +43,9 @@
 </c:if>
 
 <div class="${accountSelectorClass}" style="margin-bottom: 25px;">
-    <!-- First render pre-selected accounts (checked and disabled) -->
+    <!-- First render mandatory accounts (checked and disabled) -->
     <c:forEach items="${consumerAccounts}" var="account">
-        <c:if test='${account.selected == "true" || account.selected eq true}'>
+        <c:if test='${account.isMandatory eq true || account.isUserApproved eq true}'>
             <label for="<c:choose><c:when test='${not empty idSuffix}'>${account.value}-${idSuffix}</c:when><c:otherwise>${account.value}</c:otherwise></c:choose>">
                 <input type="checkbox"
                     id="<c:choose><c:when test='${not empty idSuffix}'>${account.value}-${idSuffix}</c:when><c:otherwise>${account.value}</c:otherwise></c:choose>"
@@ -55,6 +55,7 @@
                     disabled="disabled"
                 />
                 ${account.label}
+                <span style="color: #d13438; font-weight: bold;"> *</span>
             </label>
             <!-- Preserve submitted value for disabled checkbox -->
             <input type="hidden" name="<c:choose><c:when test='${not empty idSuffix}'>accounts-${idSuffix}</c:when><c:otherwise>accounts</c:otherwise></c:choose>" value="${account.value}" />
@@ -62,31 +63,31 @@
         </c:if>
     </c:forEach>
 
-    <!-- Separator between selected and unselected accounts if both groups exist -->
-    <c:set var="hasSelected" value="false" />
+    <!-- Separator between mandatory and optional accounts if both groups exist -->
+    <c:set var="hasMandatory" value="false" />
     <c:forEach items="${consumerAccounts}" var="account">
-        <c:if test='${account.selected == "true" || account.selected eq true}'>
-            <c:set var="hasSelected" value="true" />
+        <c:if test='${account.isMandatory eq true || account.isUserApproved eq true}'>
+            <c:set var="hasMandatory" value="true" />
         </c:if>
     </c:forEach>
 
-    <c:set var="hasUnselected" value="false" />
+    <c:set var="hasOptional" value="false" />
     <c:forEach items="${consumerAccounts}" var="account">
-        <c:if test='${not (account.selected == "true" || account.selected eq true)}'>
-            <c:set var="hasUnselected" value="true" />
+        <c:if test='${account.isMandatory eq false && account.isUserApproved eq false}'>
+            <c:set var="hasOptional" value="true" />
         </c:if>
     </c:forEach>
 
-    <c:if test="${hasSelected == 'true' && hasUnselected == 'true'}">
+    <c:if test="${hasMandatory == 'true' && hasOptional == 'true'}">
         <div style="margin: 12px 0;">
             <h4 style="margin: 6px 0; color: #333; font-size: 16px;">Optional data:</h4>
             <hr style="border: 0; border-top: 1px dashed #ccc;"/>
         </div>
     </c:if>
 
-    <!-- Then render remaining (non-selected) accounts -->
+    <!-- Then render optional (non-mandatory, non-approved) accounts -->
     <c:forEach items="${consumerAccounts}" var="account">
-        <c:if test='${not (account.selected == "true" || account.selected eq true)}'>
+        <c:if test='${account.isMandatory eq false && account.isUserApproved eq false}'>
             <label for="<c:choose><c:when test='${not empty idSuffix}'>${account.value}-${idSuffix}</c:when><c:otherwise>${account.value}</c:otherwise></c:choose>">
                 <input type="checkbox"
                     id="<c:choose><c:when test='${not empty idSuffix}'>${account.value}-${idSuffix}</c:when><c:otherwise>${account.value}</c:otherwise></c:choose>"

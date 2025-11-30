@@ -209,14 +209,14 @@ public class FSConsentConfirmServlet extends HttpServlet {
             JSONObject initialPurposeObj = initialConsentPurposeArray.getJSONObject(i);
             JSONObject purposeObj = new JSONObject();
             purposeObj.put("name", initialPurposeObj.get("name"));
-            purposeObj.put("value", initialPurposeObj.get("value"));
-            if (initialPurposeObj.getBoolean("isSelected")) {
-                purposeObj.put("isSelected", true);
+            purposeObj.put("isMandatory", initialPurposeObj.get("isMandatory"));
+            if (initialPurposeObj.getBoolean("isUserApproved")) {
+                purposeObj.put("isUserApproved", true);
             } else {
-                // Determine isSelected based on approvedPurposes
+                // Determine isUserApproved based on approvedPurposes
                 List<String> approvedPurposeList = Arrays.asList(approvedPurposes != null ? approvedPurposes : new String[0]);
-                boolean isSelected = approvedPurposeList.contains(initialPurposeObj.get("name").toString());
-                purposeObj.put("isSelected", isSelected);
+                boolean isUserApproved = approvedPurposeList.contains(initialPurposeObj.get("name").toString());
+                purposeObj.put("isUserApproved", isUserApproved);
             }
             updatedConsentPurposeArray.put(purposeObj);
         }

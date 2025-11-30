@@ -63,7 +63,7 @@
     <endpoint>
         <http method="POST" uri-template="http://localhost:3000/api/v1/consents/validate"/>
     </endpoint>
-</call> 
+</call>
 
 <!-- Log the raw response immediately after the call -->
 <log level="custom">
@@ -136,7 +136,7 @@
         <log level="custom">
             <property name="Message" value="ERROR: isValid is null - unexpected response from validation service"/>
         </log>
-        
+
         <!-- Build error response -->
         <payloadFactory media-type="json">
             <format>
@@ -148,10 +148,10 @@
                 }
             </format>
         </payloadFactory>
-        
+
         <!-- Set HTTP status code -->
         <property name="HTTP_SC" value="500" scope="axis2"/>
-        
+
         <!-- Stop further processing and send response -->
         <respond/>
     </then>
@@ -194,19 +194,19 @@
                         // Iterate through consent purposes to find approved ones matching the resource path
                         for (var i = 0; i < consentPurposesArray.length; i++) {
                             var purpose = consentPurposesArray[i];
-                            
-                            if (purpose.isSelected === true && purpose.attributes && purpose.attributes.resourcePath) {
+
+                            if (purpose.isUserApproved === true && purpose.attributes && purpose.attributes.resourcePath) {
                                 var resourcePath = purpose.attributes.resourcePath;
                                 var jsonPath = purpose.attributes.jsonPath;
-                                
-                                java.lang.System.out.println("[DEBUG] Purpose: " + purpose.name + ", isSelected: " + purpose.isSelected + 
+
+                                java.lang.System.out.println("[DEBUG] Purpose: " + purpose.name + ", isUserApproved: " + purpose.isUserApproved +
                                                             ", resourcePath: " + resourcePath + ", jsonPath: " + jsonPath);
-                                
+
                                 // Check if the resource path matches the requested resource (with {nic} placeholder)
                                 // Convert /user/{nic} pattern to match /user/123456789V
                                 var resourcePattern = resourcePath.replace("{nic}", "[^/]+");
                                 var regex = new RegExp("^" + resourcePattern + "$");
-                                
+
                                 if (regex.test(electedResource)) {
                                     hasPermission = true;
                                     if (jsonPath) {
@@ -223,7 +223,7 @@
                         // Store results in context
                         mc.setProperty("hasResourcePermission", hasPermission.toString());
                         mc.setProperty("approvedJsonPaths", JSON.stringify(approvedJsonPaths));
-                        
+
                         java.lang.System.out.println("[DEBUG] hasResourcePermission: " + hasPermission);
                     } else {
                         mc.setProperty("hasResourcePermission", "false");
@@ -260,7 +260,7 @@
                     <property name="Message" value="ERROR: Resource permission denied - no matching approved purposes"/>
                     <property name="electedResource" expression="$ctx:electedResource"/>
                 </log>
-                
+
                 <!-- Build error response for insufficient permissions -->
                 <payloadFactory media-type="json">
                     <format>
@@ -275,10 +275,10 @@
                         <arg expression="get-property('electedResource')" evaluator="xml"/>
                     </args>
                 </payloadFactory>
-                
+
                 <!-- Set HTTP status code -->
                 <property name="HTTP_SC" value="403" scope="axis2"/>
-                
+
                 <!-- Stop further processing and send response -->
                 <respond/>
             </else>
@@ -300,12 +300,12 @@
             <property name="errorCode" expression="json-eval($.errorCode)"/>
             <property name="errorMessage" expression="json-eval($.errorMessage)"/>
         </log>
-        
+
         <!-- Extract error details from response if available -->
         <property name="errorCodeFromResponse" expression="json-eval($.errorCode)" scope="default" type="STRING"/>
         <property name="errorMessageFromResponse" expression="json-eval($.errorMessage)" scope="default" type="STRING"/>
         <property name="httpCodeFromResponse" expression="json-eval($.httpCode)" scope="default" type="STRING"/>
-        
+
         <!-- Build custom error response -->
         <payloadFactory media-type="json">
             <format>
@@ -321,10 +321,10 @@
                 <arg expression="get-property('errorMessageFromResponse')" evaluator="xml"/>
             </args>
         </payloadFactory>
-        
+
         <!-- Set HTTP status code -->
         <property name="HTTP_SC" value="401" scope="axis2"/>
-        
+
         <!-- Stop further processing and send response -->
         <respond/>
     </else>
