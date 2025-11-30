@@ -21,6 +21,7 @@ import org.apache.http.impl.client.HttpClientBuilder;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.wso2.carbon.identity.application.authentication.framework.model.AuthenticatedUser;
+import org.wso2.carbon.identity.core.util.IdentityUtil;
 import org.wso2.carbon.identity.oauth.ciba.dao.CibaDAOFactory;
 import org.wso2.carbon.identity.oauth.ciba.exceptions.CibaCoreException;
 import org.wso2.carbon.identity.oauth.ciba.handlers.CibaResponseTypeHandler;
@@ -59,7 +60,7 @@ public class OBCibaResponseTypeHandler extends CibaResponseTypeHandler {
             CibaDAOFactory.getInstance().getCibaAuthMgtDAO()
                     .persistAuthenticationSuccess(authCodeKey, cibaAuthenticatedUser);
 
-            String callbackURL = "https://localhost:9446/authenticationendpoint/ciba.jsp";
+            String callbackURL = IdentityUtil.getServerURL("/authenticationendpoint/ciba.jsp", false, true);
             if (StringUtils.isNotEmpty(callbackURL)) {
                 OAuth2AuthorizeRespDTO respDTO = new OAuth2AuthorizeRespDTO();
                 respDTO.setCallbackURI(callbackURL);
