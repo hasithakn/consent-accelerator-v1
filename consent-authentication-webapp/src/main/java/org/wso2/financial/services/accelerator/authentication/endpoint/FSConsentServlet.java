@@ -251,18 +251,24 @@ public class FSConsentServlet extends HttpServlet {
         // Extract valid purposes from validPurposes array
         if (dataSet.has("consentDetails")) {
             JSONObject consentDetailsObject = dataSet.getJSONObject("consentDetails");
-            if (consentDetailsObject.has("consentPurpose")) {
-                JSONArray validPurposes = consentDetailsObject.getJSONArray("consentPurpose");
-                for (int i = 0; i < validPurposes.length(); i++) {
-                    JSONObject purposeObject = validPurposes.getJSONObject(i);
-                    Map<String, String> purposeMap = new HashMap<>();
-                    purposeMap.put("value", purposeObject.getString("name")); // This will be the checkbox value
-                    purposeMap.put("label", getPermissionDisplayName(purposeObject.getString("name")));
-                    purposeMap.put("isUserApproved",
-                            purposeObject.getBoolean("isUserApproved") ? "true" : "false"); // Pre-select if true
-                    purposeMap.put("isMandatory",
-                            purposeObject.getBoolean("isMandatory") ? "true" : "false"); // Pre-select if true
-                    purposeDataMap.add(purposeMap);
+            if (consentDetailsObject.has("purposeGroups")) {
+                JSONArray purposeGroups = consentDetailsObject.getJSONArray("purposeGroups");
+                for (int i = 0; i < purposeGroups.length(); i++) {
+                    String purposeGroupName = purposeGroups.getJSONObject(i).getString("purposeGroupName");// purpose group name
+                    JSONArray purposes = purposeGroups.getJSONObject(i).getJSONArray("purposes");
+
+                    for (int j = 0; j < purposes.length(); j++) {
+                        JSONObject purposeObject = purposes.getJSONObject(j);
+                        Map<String, String> purposeMap = new HashMap<>();
+                        purposeMap.put("value", purposeObject.getString("purposeName")); // This will be the checkbox value
+                        purposeMap.put("label", getPermissionDisplayName(purposeObject.getString("purposeName")));
+                        purposeMap.put("isUserApproved",
+                                purposeObject.getBoolean("isUserApproved") ? "true" : "false"); // Pre-select if true
+                        Boolean isMandatory = ConsentUtils.resolvePurposeMandatory(purposeGroupName, purposeObject.getString("purposeName"),
+                                getServletContext());
+                        purposeMap.put("isMandatory", String.valueOf(isMandatory)); // Pre-select if true
+                        purposeDataMap.add(purposeMap);
+                    }
                 }
             }
         } else {
@@ -342,7 +348,14 @@ public class FSConsentServlet extends HttpServlet {
                 return "Contact Details";
             case "employment":
                 return "Employment Details";
-
+            case "email":
+                return "Email Address";
+            case "home_phone":
+                return "Home Phone";
+            case "mobile_phone":
+                return "Mobile Phone";
+            case "address":
+                return "Address";
             default:
                 return permission;
         }

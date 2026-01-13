@@ -49,7 +49,7 @@
 <!-- <header name="Authorization" scope="transport" value="Basic {{consentServiceBasicAuthCredentials}}"/> -->
 <header name="Content-Type" scope="transport" value="application/jwt"/>
 <header name="Accept" scope="transport" value="application/json"/>
-<header name="org-id" scope="transport" value="org1"/>
+<header name="org-id" scope="transport" value="ORG-001"/>
 
 <!-- Set the 'messageType' property to text/plain to send JWT as plain text -->
 <property name="messageType" scope="axis2" value="text/plain"/>
@@ -160,58 +160,70 @@
 <!-- Check if 'isValid' is true -->
 <filter source="$ctx:isValid" regex="true">
     <then>
-        <!-- Extract consent purposes array and requested resource path -->
-        <property name="consentPurposes" expression="json-eval($.consentInformation.consentPurpose)" scope="default" type="STRING"/>
+        <!-- Extract consent purpose groups array and requested resource path -->
+        <property name="purposeGroups" expression="json-eval($.consentInformation.purposeGroups)" scope="default" type="STRING"/>
         <property name="electedResource" expression="$ctx:api.resource.path" scope="default" type="STRING"/>
         <property name="userId" expression="json-eval($.consentInformation.authorizations[0].userId)" scope="default" type="STRING"/>
 
         <!-- Log the extracted values for debugging -->
         <log level="custom">
-            <property name="Message" value="Consent purposes and resource extraction"/>
-            <property name="consentPurposes" expression="$ctx:consentPurposes"/>
+            <property name="Message" value="Consent purpose groups and resource extraction"/>
+            <property name="purposeGroups" expression="$ctx:purposeGroups"/>
             <property name="electedResource" expression="$ctx:electedResource"/>
             <property name="userId" expression="$ctx:userId"/>
         </log>
 
-        <!-- JavaScript to parse consent purposes, validate resource path, and collect approved jsonPaths -->
+        <!-- JavaScript to parse consent purpose groups, validate resource path, and collect approved jsonPaths -->
         <script language="js">
             <![CDATA[
-                var consentPurposesStr = mc.getProperty("consentPurposes");
+                var purposeGroupsStr = mc.getProperty("purposeGroups");
                 var electedResource = mc.getProperty("electedResource");
                 var userId = mc.getProperty("userId");
                 var hasPermission = false;
                 var approvedJsonPaths = [];
 
-                java.lang.System.out.println("[DEBUG] consentPurposesStr: " + consentPurposesStr);
+                java.lang.System.out.println("[DEBUG] purposeGroupsStr: " + purposeGroupsStr);
                 java.lang.System.out.println("[DEBUG] electedResource: " + electedResource);
                 java.lang.System.out.println("[DEBUG] userId: " + userId);
 
                 try {
-                    if (consentPurposesStr && electedResource) {
-                        var consentPurposesArray = JSON.parse(consentPurposesStr);
-                        java.lang.System.out.println("[DEBUG] Parsed consentPurposesArray length: " + consentPurposesArray.length);
+                    if (purposeGroupsStr && electedResource) {
+                        var purposeGroupsArray = JSON.parse(purposeGroupsStr);
+                        java.lang.System.out.println("[DEBUG] Parsed purposeGroupsArray length: " + purposeGroupsArray.length);
 
-                        // Iterate through consent purposes to find approved ones matching the resource path
-                        for (var i = 0; i < consentPurposesArray.length; i++) {
-                            var purpose = consentPurposesArray[i];
+                        // Iterate through purpose groups, then through purposes within each group
+                        for (var i = 0; i < purposeGroupsArray.length; i++) {
+                            var purposeGroup = purposeGroupsArray[i];
+                            var purposeGroupName = purposeGroup.purposeGroupName;
+                            var purposes = purposeGroup.purposes;
 
-                            if (purpose.isUserApproved === true && purpose.attributes && purpose.attributes.resourcePath) {
-                                var resourcePath = purpose.attributes.resourcePath;
-                                var jsonPath = purpose.attributes.jsonPath;
+                            java.lang.System.out.println("[DEBUG] Processing purpose group: " + purposeGroupName + 
+                                                        ", purposes count: " + purposes.length);
 
-                                java.lang.System.out.println("[DEBUG] Purpose: " + purpose.name + ", isUserApproved: " + purpose.isUserApproved +
-                                                            ", resourcePath: " + resourcePath + ", jsonPath: " + jsonPath);
+                            // Iterate through purposes within the group
+                            for (var j = 0; j < purposes.length; j++) {
+                                var purpose = purposes[j];
 
-                                // Check if the resource path matches the requested resource (with {nic} placeholder)
-                                // Convert /user/{nic} pattern to match /user/123456789V
-                                var resourcePattern = resourcePath.replace("{nic}", "[^/]+");
-                                var regex = new RegExp("^" + resourcePattern + "$");
+                                if (purpose.isUserApproved === true && purpose.attributes && purpose.attributes.resourcePath) {
+                                    var resourcePath = purpose.attributes.resourcePath;
+                                    var jsonPath = purpose.attributes.jsonPath;
 
-                                if (regex.test(electedResource)) {
-                                    hasPermission = true;
-                                    if (jsonPath) {
-                                        approvedJsonPaths.push(jsonPath);
-                                        java.lang.System.out.println("[DEBUG] Approved jsonPath added: " + jsonPath);
+                                    java.lang.System.out.println("[DEBUG] Purpose: " + purpose.purposeName + 
+                                                                ", isUserApproved: " + purpose.isUserApproved +
+                                                                ", resourcePath: " + resourcePath + 
+                                                                ", jsonPath: " + jsonPath);
+
+                                    // Check if the resource path matches the requested resource (with {nic} placeholder)
+                                    // Convert /user/{nic} pattern to match /user/123456789V
+                                    var resourcePattern = resourcePath.replace("{nic}", "[^/]+");
+                                    var regex = new RegExp("^" + resourcePattern + "$");
+
+                                    if (regex.test(electedResource)) {
+                                        hasPermission = true;
+                                        if (jsonPath) {
+                                            approvedJsonPaths.push(jsonPath);
+                                            java.lang.System.out.println("[DEBUG] Approved jsonPath added: " + jsonPath);
+                                        }
                                     }
                                 }
                             }
@@ -228,7 +240,7 @@
                     } else {
                         mc.setProperty("hasResourcePermission", "false");
                         mc.setProperty("approvedJsonPaths", "[]");
-                        java.lang.System.out.println("[DEBUG] consentPurposesStr or electedResource is null/empty");
+                        java.lang.System.out.println("[DEBUG] purposeGroupsStr or electedResource is null/empty");
                     }
                 } catch (e) {
                     mc.setProperty("hasResourcePermission", "false");

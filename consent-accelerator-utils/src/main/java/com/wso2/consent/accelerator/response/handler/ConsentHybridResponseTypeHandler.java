@@ -137,8 +137,7 @@ public class ConsentHybridResponseTypeHandler extends HybridResponseTypeHandler 
             HttpGet getRequest = new HttpGet(apiUrl);
 
             // Add required headers
-            getRequest.addHeader("org-id", "org1");
-            getRequest.addHeader("client-id", "clientId1");
+            getRequest.addHeader("org-id", "ORG-001");
             getRequest.addHeader("Accept", "application/json");
 
             if (log.isDebugEnabled()) {

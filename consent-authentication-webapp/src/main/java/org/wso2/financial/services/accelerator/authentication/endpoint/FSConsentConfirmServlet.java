@@ -202,25 +202,21 @@ public class FSConsentConfirmServlet extends HttpServlet {
         consentUpdateRequest.put("dataAccessValidityDuration",
                 dataAccessValidityDuration != null ? dataAccessValidityDuration : 86400);
 
-        JSONArray initialConsentPurposeArray = consentUpdateRequest.getJSONArray("consentPurpose");
+        JSONArray initialConsentPurposeGroupsArray = consentUpdateRequest.getJSONArray("purposeGroups");
         // Build consentPurpose array
-        JSONArray updatedConsentPurposeArray = new JSONArray();
-        for (int i = 0; i < initialConsentPurposeArray.length(); i++) {
-            JSONObject initialPurposeObj = initialConsentPurposeArray.getJSONObject(i);
-            JSONObject purposeObj = new JSONObject();
-            purposeObj.put("name", initialPurposeObj.get("name"));
-            purposeObj.put("isMandatory", initialPurposeObj.get("isMandatory"));
-            if (initialPurposeObj.getBoolean("isUserApproved")) {
-                purposeObj.put("isUserApproved", true);
-            } else {
-                // Determine isUserApproved based on approvedPurposes
+        for (int i = 0; i < initialConsentPurposeGroupsArray.length(); i++) {
+            JSONObject initialPurposeGroupObj = initialConsentPurposeGroupsArray.getJSONObject(i);
+
+
+            JSONArray purposes = initialPurposeGroupObj.getJSONArray("purposes");
+            for (int j = 0; j < purposes.length(); j++) {
+                JSONObject purposeObject = purposes.getJSONObject(j);
                 List<String> approvedPurposeList = Arrays.asList(approvedPurposes != null ? approvedPurposes : new String[0]);
-                boolean isUserApproved = approvedPurposeList.contains(initialPurposeObj.get("name").toString());
-                purposeObj.put("isUserApproved", isUserApproved);
+                boolean isUserApproved = approvedPurposeList.contains(purposeObject.get("purposeName").toString());
+                purposeObject.put("isUserApproved", isUserApproved);
             }
-            updatedConsentPurposeArray.put(purposeObj);
         }
-        consentUpdateRequest.put("consentPurpose", updatedConsentPurposeArray);
+        consentUpdateRequest.put("purposeGroups", initialConsentPurposeGroupsArray);
 
         // Add attributes with commonAuthId and optionally auth_req_id for CIBA flows
         JSONObject attributes = new JSONObject();
